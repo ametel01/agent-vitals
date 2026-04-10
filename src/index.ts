@@ -115,6 +115,50 @@ program
     }
   });
 
+// --- baseline ---
+program
+  .command('baseline')
+  .description('Show recommended baseline settings for optimal Claude Code quality')
+  .option('--apply', 'Write baseline settings to ~/.claude/settings.json')
+  .option('--db <path>', 'Custom database path')
+  .action((opts) => {
+    const prescriber = new Prescriber(new VitalsDB(opts.db));
+    const baselines = prescriber.getBaselineRecommendations();
+
+    console.log(chalk.bold('\n  BASELINE SETTINGS FOR OPTIMAL QUALITY\n'));
+    console.log(chalk.gray('  These settings should be applied regardless of current metrics.\n'));
+
+    for (const b of baselines) {
+      const typeColor = b.type === 'env_var' ? chalk.cyan : b.type === 'settings_json' ? chalk.magenta : chalk.yellow;
+      const typeLabel = b.type === 'env_var' ? 'ENV' : b.type === 'settings_json' ? 'settings.json' : 'permissions';
+      console.log(`  ${typeColor(typeLabel.padEnd(14))} ${chalk.white(b.key)} = ${chalk.green(String(b.value))}`);
+      console.log(`  ${' '.repeat(14)} ${chalk.gray(b.description)}`);
+      console.log('');
+    }
+
+    if (opts.apply) {
+      // Build a fake prescription list to reuse the apply logic
+      const fakePrescriptions = baselines.map(b => ({
+        metric: 'baseline',
+        metricLabel: 'Baseline',
+        currentValue: 0,
+        threshold: 0,
+        severity: 'warning' as const,
+        fix: b,
+      }));
+      const result = prescriber.apply(fakePrescriptions, { target: 'global' });
+      console.log(chalk.green.bold('  APPLIED\n'));
+      if (result.settingsWritten) {
+        console.log(chalk.green(`  ✓ Settings written to ${result.settingsPath}`));
+      }
+      console.log('');
+    } else {
+      console.log(chalk.gray('  TO APPLY:'));
+      console.log(chalk.white('    claude-vitals baseline --apply'));
+      console.log('');
+    }
+  });
+
 // --- prescribe ---
 program
   .command('prescribe')

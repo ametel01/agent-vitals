@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { VitalsDB } from '../db/database';
-import { KNOWN_FIXES, KnownFix, PrescriptionTemplate } from './known-fixes';
+import { KNOWN_FIXES, BASELINE_SETTINGS, KnownFix, PrescriptionTemplate } from './known-fixes';
 
 export interface Prescription {
   metric: string;
@@ -65,20 +65,34 @@ export class Prescriber {
     return prescriptions;
   }
 
+  getBaselineRecommendations(): PrescriptionTemplate[] {
+    return BASELINE_SETTINGS;
+  }
+
   generateSettingsJson(prescriptions: Prescription[]): Record<string, unknown> {
     const settings: Record<string, unknown> = {};
     const env: Record<string, string> = {};
+    const permissions: string[] = [];
 
     for (const p of prescriptions) {
       if (p.fix.type === 'env_var') {
         env[p.fix.key] = String(p.fix.value);
       } else if (p.fix.type === 'settings_json') {
         settings[p.fix.key] = p.fix.value;
+      } else if (p.fix.type === 'permissions') {
+        const vals = String(p.fix.value).split(',').map(v => v.trim());
+        for (const v of vals) {
+          if (!permissions.includes(v)) permissions.push(v);
+        }
       }
     }
 
     if (Object.keys(env).length > 0) {
       settings['env'] = env;
+    }
+
+    if (permissions.length > 0) {
+      settings['permissions'] = { allow: permissions };
     }
 
     return settings;
@@ -150,7 +164,7 @@ export class Prescriber {
     };
 
     // Apply settings.json (deep merge)
-    const settingsPrescriptions = prescriptions.filter(p => p.fix.type === 'env_var' || p.fix.type === 'settings_json');
+    const settingsPrescriptions = prescriptions.filter(p => p.fix.type === 'env_var' || p.fix.type === 'settings_json' || p.fix.type === 'permissions');
     if (settingsPrescriptions.length > 0) {
       const newSettings = this.generateSettingsJson(prescriptions);
       result.settingsWritten = this.mergeSettingsFile(result.settingsPath, newSettings);
@@ -186,6 +200,22 @@ export class Prescriber {
       }
       Object.assign(existing.env as Record<string, unknown>, newSettings.env);
       delete newSettings.env;
+    }
+
+    // Merge permissions (union of allow arrays)
+    if (newSettings.permissions) {
+      const newPerms = newSettings.permissions as { allow?: string[] };
+      if (!existing.permissions || typeof existing.permissions !== 'object') {
+        existing.permissions = { allow: [] };
+      }
+      const existingPerms = existing.permissions as { allow?: string[] };
+      if (!existingPerms.allow) existingPerms.allow = [];
+      for (const p of newPerms.allow || []) {
+        if (!existingPerms.allow.includes(p)) {
+          existingPerms.allow.push(p);
+        }
+      }
+      delete newSettings.permissions;
     }
 
     // Merge top-level settings

@@ -57,6 +57,12 @@ export class MetricsAnalyzer {
     this.computeContextPressure(db, raw);
     this.computeCostEstimate(db, raw);
     this.computePromptsPerSession(db, raw);
+
+    // Extended metrics (v1.1)
+    this.computeTimeOfDayQuality(db, raw);
+    this.computeToolDiversity(db, raw);
+    this.computeTokenEfficiency(db, raw);
+    this.computeSessionLength(db, raw);
   }
 
   // -----------------------------------------------------------------------
@@ -828,5 +834,124 @@ export class MetricsAnalyzer {
       result[k].push(row);
     }
     return result;
+  }
+
+  // -----------------------------------------------------------------------
+  // 21. time_of_day_quality — Read:Edit ratio by hour of day
+  // -----------------------------------------------------------------------
+  private computeTimeOfDayQuality(db: VitalsDB, raw: Database.Database): void {
+    // Compute average read:edit ratio per hour of day
+    const rows = raw.prepare(`
+      SELECT
+        CAST(substr(timestamp, 12, 2) AS INTEGER) AS hour,
+        SUM(CASE WHEN category = 'read' THEN 1 ELSE 0 END) AS reads,
+        SUM(CASE WHEN category = 'edit' THEN 1 ELSE 0 END) AS edits
+      FROM tool_calls
+      WHERE timestamp IS NOT NULL
+      GROUP BY hour
+      ORDER BY hour
+    `).all() as Array<{ hour: number; reads: number; edits: number }>;
+
+    const hourData: Record<number, number> = {};
+    for (const r of rows) {
+      hourData[r.hour] = r.edits > 0 ? r.reads / r.edits : r.reads;
+    }
+
+    // Find best and worst hours
+    let bestHour = 0, worstHour = 0, bestRatio = 0, worstRatio = Infinity;
+    for (const [h, ratio] of Object.entries(hourData)) {
+      if (ratio > bestRatio) { bestRatio = ratio; bestHour = Number(h); }
+      if (ratio < worstRatio) { worstRatio = ratio; worstHour = Number(h); }
+    }
+
+    // Store as a single metric with detail JSON
+    const today = new Date().toISOString().slice(0, 10);
+    db.upsertDailyMetric({
+      date: today,
+      metric_name: 'time_of_day_quality',
+      metric_value: worstRatio,
+      metric_detail: JSON.stringify({
+        hourly: hourData,
+        bestHour,
+        bestRatio: Math.round(bestRatio * 10) / 10,
+        worstHour,
+        worstRatio: Math.round(worstRatio * 10) / 10,
+      }),
+    });
+  }
+
+  // -----------------------------------------------------------------------
+  // 22. tool_diversity — unique tools used per session (more = better research)
+  // -----------------------------------------------------------------------
+  private computeToolDiversity(db: VitalsDB, raw: Database.Database): void {
+    const rows = raw.prepare(`
+      SELECT ${dateExpr} AS day,
+        COUNT(DISTINCT tool_name) AS unique_tools,
+        COUNT(*) AS total_calls
+      FROM tool_calls
+      WHERE timestamp IS NOT NULL
+      GROUP BY day
+    `).all() as Array<{ day: string; unique_tools: number; total_calls: number }>;
+
+    for (const r of rows) {
+      db.upsertDailyMetric({
+        date: r.day,
+        metric_name: 'tool_diversity',
+        metric_value: r.unique_tools,
+        metric_detail: JSON.stringify({ unique_tools: r.unique_tools, total_calls: r.total_calls }),
+      });
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // 23. token_efficiency — output tokens per successful edit
+  // -----------------------------------------------------------------------
+  private computeTokenEfficiency(db: VitalsDB, raw: Database.Database): void {
+    const rows = raw.prepare(`
+      SELECT substr(m.timestamp, 1, 10) AS day,
+        SUM(m.output_tokens) AS total_output,
+        (SELECT COUNT(*) FROM tool_calls tc2
+         WHERE tc2.category = 'edit'
+           AND substr(tc2.timestamp, 1, 10) = substr(m.timestamp, 1, 10)) AS edits
+      FROM messages m
+      WHERE m.timestamp IS NOT NULL AND m.output_tokens IS NOT NULL
+      GROUP BY day
+    `).all() as Array<{ day: string; total_output: number; edits: number }>;
+
+    for (const r of rows) {
+      const tokensPerEdit = r.edits > 0 ? r.total_output / r.edits : 0;
+      db.upsertDailyMetric({
+        date: r.day,
+        metric_name: 'token_efficiency',
+        metric_value: Math.round(tokensPerEdit),
+        metric_detail: JSON.stringify({ total_output: r.total_output, edits: r.edits }),
+      });
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // 24. session_length_minutes — average session duration
+  // -----------------------------------------------------------------------
+  private computeSessionLength(db: VitalsDB, raw: Database.Database): void {
+    const rows = raw.prepare(`
+      SELECT substr(started_at, 1, 10) AS day,
+        AVG(
+          (julianday(ended_at) - julianday(started_at)) * 24 * 60
+        ) AS avg_minutes
+      FROM sessions
+      WHERE started_at IS NOT NULL AND ended_at IS NOT NULL
+        AND ended_at > started_at
+      GROUP BY day
+    `).all() as Array<{ day: string; avg_minutes: number }>;
+
+    for (const r of rows) {
+      if (r.avg_minutes > 0) {
+        db.upsertDailyMetric({
+          date: r.day,
+          metric_name: 'session_length_minutes',
+          metric_value: Math.round(r.avg_minutes * 10) / 10,
+        });
+      }
+    }
   }
 }
