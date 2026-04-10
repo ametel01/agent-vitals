@@ -10,13 +10,14 @@ import { RegressionDetector } from './regression/detector';
 import { TerminalReport } from './reports/terminal';
 import { MarkdownReport } from './reports/markdown';
 import { serveDashboard } from './dashboard/server';
+import { Prescriber } from './prescriptions/prescriber';
 
 const program = new Command();
 
 program
   .name('claude-vitals')
   .description('Continuously monitor Claude Code quality by analyzing session logs')
-  .version('1.0.0');
+  .version('1.1.0');
 
 // --- scan ---
 program
@@ -106,7 +107,157 @@ program
           const colorFn = alert.severity === 'critical' ? chalk.red : chalk.yellow;
           console.log(`  ${colorFn(alert.message)}`);
         }
+        console.log('');
+        console.log(chalk.gray('  Run "claude-vitals prescribe" for specific fixes.'));
       }
+    } finally {
+      db.close();
+    }
+  });
+
+// --- prescribe ---
+program
+  .command('prescribe')
+  .description('Analyze metrics and prescribe specific fixes (env vars, settings, CLAUDE.md rules)')
+  .option('--apply', 'Actually write the fixes (default: dry-run showing recommendations)')
+  .option('--target <scope>', 'Where to apply: global (~/.claude/) or project (.claude/)', 'global')
+  .option('-f, --format <format>', 'Output format: terminal, json, or md', 'terminal')
+  .option('--db <path>', 'Custom database path')
+  .action((opts) => {
+    const db = new VitalsDB(opts.db);
+    try {
+      const prescriber = new Prescriber(db);
+      const prescriptions = prescriber.diagnose();
+
+      if (prescriptions.length === 0) {
+        console.log(chalk.green('✓ No prescriptions needed — all metrics within acceptable ranges.'));
+        return;
+      }
+
+      if (opts.format === 'json') {
+        console.log(JSON.stringify(prescriptions, null, 2));
+        return;
+      }
+
+      if (opts.format === 'md' || opts.format === 'markdown') {
+        const lines: string[] = [];
+        lines.push('# Quality Prescriptions');
+        lines.push('');
+        const criticals = prescriptions.filter(p => p.severity === 'critical');
+        const warnings = prescriptions.filter(p => p.severity === 'warning');
+
+        if (criticals.length > 0) {
+          lines.push('## Critical Fixes');
+          lines.push('');
+          const seen = new Set<string>();
+          for (const p of criticals) {
+            const key = `${p.metric}:${p.fix.key}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const typeLabel = p.fix.type === 'env_var' ? 'ENV' : p.fix.type === 'settings_json' ? 'settings.json' : 'CLAUDE.md';
+            lines.push(`- **${p.metricLabel}** at ${p.currentValue} (threshold: ${p.threshold})`);
+            lines.push(`  - \`${typeLabel}\`: ${p.fix.type === 'claude_md' ? p.fix.description : `${p.fix.key} = ${p.fix.value}`}`);
+          }
+          lines.push('');
+        }
+
+        if (warnings.length > 0) {
+          lines.push('## Warnings');
+          lines.push('');
+          const seen = new Set<string>();
+          for (const p of warnings) {
+            const key = `${p.metric}:${p.fix.key}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const typeLabel = p.fix.type === 'env_var' ? 'ENV' : p.fix.type === 'settings_json' ? 'settings.json' : 'CLAUDE.md';
+            lines.push(`- **${p.metricLabel}** at ${p.currentValue} (threshold: ${p.threshold})`);
+            lines.push(`  - \`${typeLabel}\`: ${p.fix.type === 'claude_md' ? p.fix.description : `${p.fix.key} = ${p.fix.value}`}`);
+          }
+          lines.push('');
+        }
+
+        console.log(lines.join('\n'));
+        return;
+      }
+
+      // Terminal format
+      const criticals = prescriptions.filter(p => p.severity === 'critical');
+      const warnings = prescriptions.filter(p => p.severity === 'warning');
+      const uniqueMetrics = new Set(prescriptions.map(p => p.metric));
+
+      console.log(chalk.bold('\n  PRESCRIPTIONS\n'));
+      console.log(chalk.gray(`  ${uniqueMetrics.size} metrics degraded: ${criticals.length > 0 ? chalk.red(`${new Set(criticals.map(p => p.metric)).size} critical`) : ''}${criticals.length > 0 && warnings.length > 0 ? ', ' : ''}${warnings.length > 0 ? chalk.yellow(`${new Set(warnings.map(p => p.metric)).size} warning`) : ''}`));
+      console.log('');
+
+      let num = 0;
+      const printedMetrics = new Set<string>();
+
+      // Print critical fixes first
+      if (criticals.length > 0) {
+        console.log(chalk.red.bold('  CRITICAL FIXES\n'));
+        for (const p of criticals) {
+          if (printedMetrics.has(`${p.metric}:${p.fix.key}`)) continue;
+          printedMetrics.add(`${p.metric}:${p.fix.key}`);
+          num++;
+
+          if (!printedMetrics.has(p.metric)) {
+            console.log(chalk.white(`  ${num}. ${p.metricLabel} at ${chalk.red(String(p.currentValue))} (threshold: ${p.threshold})\n`));
+          }
+
+          const typeColor = p.fix.type === 'env_var' ? chalk.cyan : p.fix.type === 'settings_json' ? chalk.magenta : chalk.yellow;
+          const typeLabel = p.fix.type === 'env_var' ? 'ENV' : p.fix.type === 'settings_json' ? 'settings.json' : 'CLAUDE.md';
+
+          if (p.fix.type === 'claude_md') {
+            console.log(`     ${typeColor(typeLabel)}: ${p.fix.description}`);
+          } else {
+            console.log(`     ${typeColor(typeLabel)}: ${p.fix.key} = ${chalk.white(String(p.fix.value))}`);
+          }
+        }
+        console.log('');
+      }
+
+      // Print warnings
+      if (warnings.length > 0) {
+        console.log(chalk.yellow.bold('  WARNING FIXES\n'));
+        for (const p of warnings) {
+          if (printedMetrics.has(`${p.metric}:${p.fix.key}`)) continue;
+          printedMetrics.add(`${p.metric}:${p.fix.key}`);
+          num++;
+
+          const typeColor = p.fix.type === 'env_var' ? chalk.cyan : p.fix.type === 'settings_json' ? chalk.magenta : chalk.yellow;
+          const typeLabel = p.fix.type === 'env_var' ? 'ENV' : p.fix.type === 'settings_json' ? 'settings.json' : 'CLAUDE.md';
+
+          console.log(chalk.white(`  ${num}. ${p.metricLabel} at ${chalk.yellow(String(p.currentValue))} (threshold: ${p.threshold})`));
+          if (p.fix.type === 'claude_md') {
+            console.log(`     ${typeColor(typeLabel)}: ${p.fix.description}`);
+          } else {
+            console.log(`     ${typeColor(typeLabel)}: ${p.fix.key} = ${chalk.white(String(p.fix.value))}`);
+          }
+        }
+        console.log('');
+      }
+
+      // Apply or show instructions
+      if (opts.apply) {
+        const result = prescriber.apply(prescriptions, { target: opts.target });
+        console.log(chalk.green.bold('  APPLIED\n'));
+        if (result.settingsWritten) {
+          console.log(chalk.green(`  ✓ Settings written to ${result.settingsPath}`));
+          if (result.envVarsCount > 0) console.log(chalk.gray(`    ${result.envVarsCount} environment variable(s)`));
+          if (result.settingsCount > 0) console.log(chalk.gray(`    ${result.settingsCount} setting(s)`));
+        }
+        if (result.claudeMdWritten) {
+          console.log(chalk.green(`  ✓ Rules written to ${result.claudeMdPath}`));
+          console.log(chalk.gray(`    ${result.claudeMdRulesCount} behavioral rule(s)`));
+        }
+        console.log('');
+        console.log(chalk.gray('  Run "claude-vitals impact" after 7 days to measure the effect.'));
+      } else {
+        console.log(chalk.gray('  TO APPLY:'));
+        console.log(chalk.white(`    claude-vitals prescribe --apply                # writes to ~/.claude/`));
+        console.log(chalk.white(`    claude-vitals prescribe --apply --target project  # writes to .claude/`));
+      }
+      console.log('');
     } finally {
       db.close();
     }

@@ -105,6 +105,24 @@ Slow down. Read more context. Make smaller, verifiable changes.
 **Low Sentiment / High Frustration:**
 Be more thorough. Read before editing. Don't skip steps. Don't produce partial work.
 
+### Step 4.5: Configuration Prescriptions
+
+If any metric is in WARNING or DEGRADED range, check for config-level fixes:
+
+```bash
+node H:/ClaudeValidate/dist/index.js prescribe
+```
+
+This outputs specific environment variables, settings.json values, and CLAUDE.md rules to fix the degraded metrics. Report these to the user.
+
+If they agree, apply automatically:
+
+```bash
+node H:/ClaudeValidate/dist/index.js prescribe --apply
+```
+
+This writes the fixes to `~/.claude/settings.json` and `~/.claude/CLAUDE.md`. The impact can be measured after 7 days with `claude-vitals impact`.
+
 ### Step 5: Report to User
 
 Tell the user directly:

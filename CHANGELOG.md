@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.0 — 2026-04-10
+
+### Added
+
+- **`prescribe` command** — analyzes degraded metrics and outputs specific fixes: environment variables (`CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING`, `MAX_THINKING_TOKENS`), `settings.json` values (`effortLevel`, `showThinkingSummaries`), and `CLAUDE.md` behavioral rules. Supports `--apply` to write fixes automatically, `--target project` for project-level scope, and `--format json/md` for machine-readable output.
+- **Documentation site** — single-file HTML at `docs/index.html` for GitHub Pages. Covers all 20 metrics, CLI reference, prescriptions guide, configuration best practices, and the stellaraccident backstory.
+- **Prescription integration in `/vitals` skill** — Step 4.5 runs `prescribe` and reports config-level fixes alongside behavioral corrections.
+- **Health command hint** — `claude-vitals health` now suggests running `prescribe` when regressions are detected.
+
+### Changed
+
+- **README rewritten** — problem-first Archon-style layout with badges, condensed to ~100 lines, links to docs site for details.
+
+### Removed
+
+- References to last30days-skill structural inspiration (CONTRIBUTORS.md, README.md).
+
 ## 1.0.0 — 2026-04-10
 
 Initial release.

@@ -8,7 +8,7 @@ COMMANDS_DIR="$HOME/.claude/commands"
 
 echo "Removing claude-vitals skills..."
 
-for f in vitals.md vitals-quick.md vitals-report.md vitals-dashboard.md; do
+for f in vitals.md vitals-quick.md vitals-report.md vitals-dashboard.md vitals-prescribe.md; do
   if [ -f "$COMMANDS_DIR/$f" ]; then
     rm "$COMMANDS_DIR/$f"
     echo "  Removed $f"

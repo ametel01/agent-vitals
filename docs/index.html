@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>claude-vitals &mdash; Continuous Quality Monitoring for Claude Code</title>
+<meta name="description" content="Monitor Claude Code quality by analyzing session logs. 20 metrics, regression detection, and automated prescriptions based on analysis of 234,760 tool calls.">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0f0f0f;--card:#1a1a2e;--text:#e0e0e0;--text-dim:#888;--accent:#00d4ff;--green:#00ff88;--red:#ff4444;--yellow:#ffd700;--border:#2a2a3e;--sidebar-w:220px;--font-mono:'SF Mono','Fira Code','Cascadia Code',Consolas,monospace}
+html{scroll-behavior:smooth;background:var(--bg);color:var(--text);font-family:var(--font-mono);font-size:15px;line-height:1.65}
+body{display:flex;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+h1,h2,h3{color:#fff;font-weight:600}
+h2{font-size:1.4rem;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid var(--border)}
+h3{font-size:1.1rem;margin:1.2rem 0 .6rem}
+
+/* Sidebar */
+.sidebar{position:fixed;top:0;left:0;width:var(--sidebar-w);height:100vh;background:#111122;border-right:1px solid var(--border);padding:1.5rem 0;overflow-y:auto;z-index:100;transition:transform .3s}
+.sidebar .logo{padding:0 1rem .8rem;font-size:1rem;font-weight:700;color:var(--accent);letter-spacing:-.5px}
+.sidebar .logo span{color:var(--green)}
+.sidebar nav a{display:block;padding:.4rem 1rem;font-size:.78rem;color:var(--text-dim);transition:color .15s,border-color .15s;border-left:2px solid transparent}
+.sidebar nav a:hover,.sidebar nav a.active{color:var(--accent);border-left-color:var(--accent);text-decoration:none;background:rgba(0,212,255,.04)}
+
+/* Hamburger */
+.hamburger{display:none;position:fixed;top:1rem;right:1rem;z-index:200;background:var(--card);border:1px solid var(--border);color:var(--accent);font-size:1.4rem;width:40px;height:40px;border-radius:6px;cursor:pointer;align-items:center;justify-content:center}
+
+/* Main */
+.main{margin-left:var(--sidebar-w);flex:1;max-width:900px;padding:2rem 2.5rem 4rem}
+section{padding-top:2rem;margin-bottom:3rem}
+
+/* Hero */
+.hero-title{font-size:2.6rem;color:var(--accent);letter-spacing:-1px;margin-bottom:.4rem}
+.hero-tag{font-size:1rem;color:var(--text-dim);max-width:600px;line-height:1.6;margin-bottom:1.5rem}
+.hero-install{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1rem 1.2rem;font-size:.85rem;margin-bottom:1.2rem;position:relative;overflow-x:auto;white-space:pre}
+.hero-btns{display:flex;gap:.8rem;flex-wrap:wrap;margin-top:1rem}
+.btn{display:inline-block;padding:.55rem 1.2rem;border-radius:6px;font-size:.82rem;font-family:var(--font-mono);font-weight:600;border:1px solid var(--border);transition:background .2s,border-color .2s}
+.btn-primary{background:var(--accent);color:#0f0f0f;border-color:var(--accent)}
+.btn-primary:hover{background:#00bfe6;text-decoration:none}
+.btn-secondary{background:transparent;color:var(--accent)}
+.btn-secondary:hover{background:rgba(0,212,255,.08);text-decoration:none}
+
+/* Code blocks */
+pre{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1rem 1.2rem;overflow-x:auto;font-size:.82rem;margin:.8rem 0;position:relative;line-height:1.7}
+pre .copy-btn{position:absolute;top:.5rem;right:.5rem;background:var(--border);border:none;color:var(--text-dim);font-size:.7rem;padding:.25rem .5rem;border-radius:4px;cursor:pointer;font-family:var(--font-mono);opacity:0;transition:opacity .2s}
+pre:hover .copy-btn{opacity:1}
+pre .copy-btn:hover{color:var(--accent)}
+code{font-family:var(--font-mono);font-size:.85rem}
+p code{background:var(--card);padding:.15rem .4rem;border-radius:4px;font-size:.82rem}
+
+/* Tables */
+.table-wrap{overflow-x:auto;margin:.8rem 0}
+table{width:100%;border-collapse:collapse;font-size:.8rem}
+th{text-align:left;padding:.5rem .6rem;background:#16162b;color:var(--accent);border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:.45rem .6rem;border-bottom:1px solid var(--border);vertical-align:top}
+tr:hover td{background:rgba(0,212,255,.03)}
+
+/* Badges */
+.badge{display:inline-block;padding:.15rem .5rem;border-radius:4px;font-size:.7rem;font-weight:600}
+.badge-green{background:rgba(0,255,136,.12);color:var(--green)}
+.badge-red{background:rgba(255,68,68,.12);color:var(--red)}
+.badge-yellow{background:rgba(255,215,0,.12);color:var(--yellow)}
+
+/* Cards */
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem;margin:1rem 0}
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1rem 1.2rem}
+.card h3{margin-top:0;color:var(--accent);font-size:.95rem}
+.card p{font-size:.82rem;color:var(--text-dim)}
+
+/* Stat boxes */
+.stat-row{display:flex;gap:1rem;flex-wrap:wrap;margin:1rem 0}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:.8rem 1rem;flex:1;min-width:140px;text-align:center}
+.stat .num{font-size:1.6rem;font-weight:700;color:var(--accent)}
+.stat .label{font-size:.72rem;color:var(--text-dim);margin-top:.2rem}
+.stat.bad .num{color:var(--red)}
+
+/* Two-path layout */
+.paths{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;margin:1rem 0}
+.path{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1.2rem}
+.path h3{margin-top:0}
+
+/* Prescription table */
+.rx-type{font-size:.72rem;padding:.15rem .4rem;border-radius:3px;font-weight:600}
+.rx-env{background:rgba(0,212,255,.12);color:var(--accent)}
+.rx-settings{background:rgba(0,255,136,.12);color:var(--green)}
+.rx-claude{background:rgba(255,215,0,.12);color:var(--yellow)}
+
+/* Callout */
+.callout{background:var(--card);border-left:3px solid var(--accent);padding:1rem 1.2rem;border-radius:0 8px 8px 0;margin:1rem 0;font-size:.85rem}
+.callout.warn{border-left-color:var(--yellow)}
+.callout.good{border-left-color:var(--green)}
+
+/* Footer */
+footer{border-top:1px solid var(--border);padding:2rem 0;margin-top:2rem;text-align:center;font-size:.78rem;color:var(--text-dim)}
+footer a{color:var(--accent)}
+
+/* Mobile */
+@media(max-width:768px){
+  .sidebar{transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .hamburger{display:flex}
+  .main{margin-left:0;padding:1.2rem 1rem 3rem}
+  .hero-title{font-size:1.8rem}
+  .paths{grid-template-columns:1fr}
+  .stat-row{flex-direction:column}
+  .card-grid{grid-template-columns:1fr}
+}
+@media(min-width:769px){.hamburger{display:none}}
+</style>
+</head>
+<body>
+
+<!-- Hamburger -->
+<button class="hamburger" id="hamburger" aria-label="Menu">&#9776;</button>
+
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar">
+  <div class="logo">claude<span>-vitals</span></div>
+  <nav>
+    <a href="#hero">Home</a>
+    <a href="#why">Why This Exists</a>
+    <a href="#quickstart">Quick Start</a>
+    <a href="#metrics">The 20 Metrics</a>
+    <a href="#cli">CLI Reference</a>
+    <a href="#prescriptions">Prescriptions</a>
+    <a href="#skills">Skills</a>
+    <a href="#changes">Change Tracking</a>
+    <a href="#config">Configuration</a>
+    <a href="#dashboard">Dashboard</a>
+  </nav>
+</aside>
+
+<!-- Main Content -->
+<div class="main">
+
+<!-- HERO -->
+<section id="hero">
+  <h1 class="hero-title">claude-vitals</h1>
+  <p class="hero-tag">Your AI coding assistant's quality is invisible. You feel it getting worse but can't prove it. Now you can.</p>
+  <div class="stat-row">
+    <div class="stat"><div class="num">20</div><div class="label">metrics tracked</div></div>
+    <div class="stat"><div class="num">234K</div><div class="label">tool calls analyzed</div></div>
+    <div class="stat"><div class="num">7-day</div><div class="label">rolling regression</div></div>
+  </div>
+  <div class="hero-install"><span class="copy-btn" onclick="copyBlock(this)">copy</span>git clone https://github.com/Okohedeki/claude-vitals.git
+cd claude-vitals
+npm install && npm run build</div>
+  <div class="hero-btns">
+    <a class="btn btn-primary" href="https://github.com/Okohedeki/claude-vitals" target="_blank">View on GitHub</a>
+    <a class="btn btn-secondary" href="#quickstart">Quick Start</a>
+  </div>
+</section>
+
+<!-- WHY THIS EXISTS -->
+<section id="why">
+  <h2>Why This Exists</h2>
+  <div class="callout">
+    In 2025, <a href="https://github.com/anthropics/claude-code/issues/42796" target="_blank">@stellaraccident</a> published an analysis of <strong>234,760 tool calls</strong> that proved reduced thinking depth causes measurable quality collapse in AI coding assistants.
+  </div>
+  <p style="margin:.8rem 0">The findings were stark:</p>
+  <div class="stat-row">
+    <div class="stat bad"><div class="num">-70%</div><div class="label">Read:Edit ratio drop</div></div>
+    <div class="stat bad"><div class="num">6% &rarr; 34%</div><div class="label">Blind edit rate</div></div>
+    <div class="stat bad"><div class="num">0 &rarr; 10/day</div><div class="label">Laziness signals</div></div>
+  </div>
+  <div class="stat-row">
+    <div class="stat bad"><div class="num">$12 &rarr; $1,504</div><div class="label">Cost per day</div></div>
+    <div class="stat bad"><div class="num">-67%</div><div class="label">Thinking depth</div></div>
+  </div>
+  <p style="margin:1rem 0;font-size:.88rem;color:var(--text-dim)">Thinking depth dropped 67% before anyone noticed &mdash; because redaction hid it. By the time users felt the change, it had already been degrading for weeks.</p>
+  <p style="font-size:.88rem"><strong style="color:var(--green)">claude-vitals</strong> makes that analysis continuous, automatic, and actionable.</p>
+  <p style="margin-top:.6rem"><a href="https://github.com/anthropics/claude-code/issues/42796" target="_blank">Read the original analysis &rarr;</a></p>
+</section>
+
+<!-- QUICK START -->
+<section id="quickstart">
+  <h2>Quick Start</h2>
+  <div class="paths">
+    <div class="path">
+      <h3 style="color:var(--green)">Full Setup <span class="badge badge-green">5 min</span></h3>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>git clone https://github.com/Okohedeki/claude-vitals.git
+cd claude-vitals
+npm install
+npm run build
+bash scripts/install.sh
+claude-vitals scan</pre>
+      <p style="font-size:.8rem;color:var(--text-dim);margin-top:.5rem">Installs the CLI, skill commands, and runs your first scan.</p>
+    </div>
+    <div class="path">
+      <h3 style="color:var(--accent)">Already Installed?</h3>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals scan && claude-vitals health</pre>
+      <p style="font-size:.8rem;color:var(--text-dim);margin-top:.5rem">Ingest new logs and get a one-line status.</p>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals prescribe</pre>
+      <p style="font-size:.8rem;color:var(--text-dim);margin-top:.5rem">Get specific fixes for any degraded metrics.</p>
+    </div>
+  </div>
+</section>
+
+<!-- THE 20 METRICS -->
+<section id="metrics">
+  <h2>The 20 Metrics</h2>
+  <p style="font-size:.85rem;color:var(--text-dim);margin-bottom:1rem">Every metric has a <span class="badge badge-green">good</span> benchmark from the pre-regression period and a <span class="badge badge-red">degraded</span> benchmark from the post-regression period, derived from the original 234,760 tool call analysis.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>#</th><th>Metric</th><th>Good</th><th>Degraded</th><th>What It Measures</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>Thinking Depth</td><td class="badge-green">&ge; 2,200</td><td class="badge-red">&le; 600</td><td>Median estimated thinking chars &mdash; the upstream indicator of all quality</td></tr>
+        <tr><td>2</td><td>Read:Edit Ratio</td><td class="badge-green">&ge; 6.6</td><td class="badge-red">&le; 2.0</td><td>Files read per file edited &mdash; researching before acting</td></tr>
+        <tr><td>3</td><td>Research:Mutation</td><td class="badge-green">&ge; 8.7</td><td class="badge-red">&le; 2.8</td><td>All research actions vs all mutation actions</td></tr>
+        <tr><td>4</td><td>Blind Edit Rate</td><td class="badge-green">&le; 6.2%</td><td class="badge-red">&ge; 33.7%</td><td>% of edits on files not read in last 10 tool calls</td></tr>
+        <tr><td>5</td><td>Write vs Edit</td><td class="badge-green">&le; 4.9%</td><td class="badge-red">&ge; 11.1%</td><td>Full-file writes as % of all mutations</td></tr>
+        <tr><td>6</td><td>First Tool After Prompt</td><td class="badge-green">Read</td><td class="badge-red">Edit</td><td>Whether the model researches or immediately edits</td></tr>
+        <tr><td>7</td><td>Reasoning Loops/1K</td><td class="badge-green">&le; 8.2</td><td class="badge-red">&ge; 26.6</td><td>Visible self-corrections ("actually," "oh wait") per 1K calls</td></tr>
+        <tr><td>8</td><td>Laziness/day</td><td class="badge-green">0</td><td class="badge-red">&ge; 10</td><td>Stop-hook violations: permission seeking, premature stopping, dodging</td></tr>
+        <tr><td>9</td><td>Self-Admitted Failures/1K</td><td class="badge-green">&le; 0.1</td><td class="badge-red">&ge; 0.5</td><td>Model recognizing its own bad work after correction</td></tr>
+        <tr><td>10</td><td>User Interrupts/1K</td><td class="badge-green">&le; 0.9</td><td class="badge-red">&ge; 11.4</td><td>How often the user hits Escape to stop the model</td></tr>
+        <tr><td>11</td><td>Sentiment Ratio</td><td class="badge-green">&ge; 4.4</td><td class="badge-red">&le; 3.0</td><td>Positive to negative word ratio in user prompts</td></tr>
+        <tr><td>12</td><td>Frustration Rate</td><td class="badge-green">&le; 5.8%</td><td class="badge-red">&ge; 9.8%</td><td>% of prompts with frustration indicators</td></tr>
+        <tr><td>13</td><td>Session Autonomy</td><td class="badge-green">High</td><td class="badge-red">Low</td><td>Time gaps between user prompts &mdash; longer = model works independently</td></tr>
+        <tr><td>14</td><td>Edit Churn</td><td class="badge-green">Low</td><td class="badge-red">High</td><td>Same file edited 3+ times in 10 calls &mdash; thrashing vs planning</td></tr>
+        <tr><td>15</td><td>Bash Success Rate</td><td class="badge-green">High</td><td class="badge-red">Low</td><td>Build/test/bash command success rates</td></tr>
+        <tr><td>16</td><td>Subagent %</td><td class="badge-green">&mdash;</td><td class="badge-red">&mdash;</td><td>% of tool calls delegated to sub-agents</td></tr>
+        <tr><td>17</td><td>Context Pressure</td><td class="badge-green">&lt; 50%</td><td class="badge-red">&gt; 75%</td><td>Quality metrics segmented by context window utilization</td></tr>
+        <tr><td>18</td><td>Model Segmentation</td><td class="badge-green">&mdash;</td><td class="badge-red">&mdash;</td><td>All metrics broken down by model (Sonnet vs Opus etc.)</td></tr>
+        <tr><td>19</td><td>Cost Efficiency</td><td class="badge-green">$12/day</td><td class="badge-red">$1,504/day</td><td>Estimated cost per session, per successful edit, per commit</td></tr>
+        <tr><td>20</td><td>Prompts/Session</td><td class="badge-green">&ge; 35.9</td><td class="badge-red">&le; 27.9</td><td>Users give up faster when quality is poor</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- CLI REFERENCE -->
+<section id="cli">
+  <h2>CLI Reference</h2>
+  <div class="card-grid">
+    <div class="card">
+      <h3>scan</h3>
+      <p>Ingest Claude Code session logs into the database. Detects config changes and computes all metrics.</p>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals scan
+claude-vitals scan --force
+claude-vitals scan --verbose</pre>
+      <p style="margin-top:.4rem"><code>--force</code> re-scans all sessions. <code>--verbose</code> shows detailed progress. <code>--db &lt;path&gt;</code> uses a custom database.</p>
+    </div>
+    <div class="card">
+      <h3>health</h3>
+      <p>One-line green/yellow/red health status with alerts.</p>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals health</pre>
+      <p style="margin-top:.4rem">Returns an exit code matching severity. Pipe into CI or cron jobs.</p>
+    </div>
+    <div class="card">
+      <h3>report</h3>
+      <p>Generate a full quality report with trends, sparklines, and benchmarks.</p>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals report
+claude-vitals report --format md
+claude-vitals report --days 14
+claude-vitals report --model opus</pre>
+      <p style="margin-top:.4rem"><code>--format md</code> outputs GitHub-postable Markdown. <code>--days</code> sets the window. <code>--model</code> / <code>--project</code> filter data.</p>
+    </div>
+    <div class="card">
+      <h3>prescribe</h3>
+      <p>Analyze degraded metrics and prescribe specific fixes: env vars, settings.json, CLAUDE.md rules.</p>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals prescribe
+claude-vitals prescribe --apply
+claude-vitals prescribe --target project
+claude-vitals prescribe --format json</pre>
+      <p style="margin-top:.4rem"><code>--apply</code> writes fixes. Default is dry-run. <code>--target</code> chooses global vs project scope.</p>
+    </div>
+    <div class="card">
+      <h3>dashboard</h3>
+      <p>Launch a local Grafana-style web dashboard with all charts and a change timeline.</p>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals dashboard</pre>
+      <p style="margin-top:.4rem">Opens in your default browser. Dark theme, responsive, real-time data.</p>
+    </div>
+    <div class="card">
+      <h3>compare</h3>
+      <p>Side-by-side period comparison for all metrics.</p>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals compare</pre>
+      <p style="margin-top:.4rem">Compares two time periods to show improvement or regression across every metric.</p>
+    </div>
+    <div class="card">
+      <h3>annotate</h3>
+      <p>Log a manual change event for impact tracking.</p>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals annotate "Switched to Opus"
+claude-vitals annotate "Added error-handling skill"
+claude-vitals annotate "Set /effort max"</pre>
+    </div>
+    <div class="card">
+      <h3>impact</h3>
+      <p>Show before/after metrics for a specific change event.</p>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals impact 3</pre>
+      <p style="margin-top:.4rem">Computes all 20 metrics for 7 days before and after the change, with a verdict.</p>
+    </div>
+    <div class="card">
+      <h3>changes</h3>
+      <p>List all detected and annotated changes.</p>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals changes</pre>
+      <p style="margin-top:.4rem">Shows config file changes, manual annotations, and their timestamps.</p>
+    </div>
+  </div>
+</section>
+
+<!-- PRESCRIPTIONS -->
+<section id="prescriptions">
+  <h2>Prescriptions</h2>
+  <div class="callout good">claude-vitals doesn't just detect problems &mdash; it prescribes specific fixes. Three types: <span class="rx-type rx-env">ENV</span> environment variables, <span class="rx-type rx-settings">settings.json</span> values, and <span class="rx-type rx-claude">CLAUDE.md</span> rules.</div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Degraded Metric</th><th>Type</th><th>Prescription</th></tr></thead>
+      <tbody>
+        <tr><td>Thinking Depth</td><td><span class="rx-type rx-env">ENV</span></td><td><code>CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING=1</code></td></tr>
+        <tr><td>Thinking Depth</td><td><span class="rx-type rx-env">ENV</span></td><td><code>MAX_THINKING_TOKENS=31999</code></td></tr>
+        <tr><td>Thinking Depth</td><td><span class="rx-type rx-settings">settings.json</span></td><td><code>effortLevel: "high"</code></td></tr>
+        <tr><td>Read:Edit Ratio</td><td><span class="rx-type rx-claude">CLAUDE.md</span></td><td>Before ANY edit, read the target file AND at least 2 related files</td></tr>
+        <tr><td>Blind Edit Rate</td><td><span class="rx-type rx-claude">CLAUDE.md</span></td><td>Zero tolerance: verify target file was Read in last 10 tool calls before every edit</td></tr>
+        <tr><td>Write vs Edit</td><td><span class="rx-type rx-claude">CLAUDE.md</span></td><td>Never use Write to modify existing files &mdash; use Edit for surgical changes only</td></tr>
+        <tr><td>Laziness Signals</td><td><span class="rx-type rx-claude">CLAUDE.md</span></td><td>Ban: "should I continue?", "want me to keep going?", "good stopping point", "out of scope"</td></tr>
+        <tr><td>Reasoning Loops</td><td><span class="rx-type rx-claude">CLAUDE.md</span></td><td>Resolve contradictions internally before producing output</td></tr>
+        <tr><td>Self-Admitted Failures</td><td><span class="rx-type rx-claude">CLAUDE.md</span></td><td>Read more before editing. Test after changing. Verify before moving on.</td></tr>
+        <tr><td>Research:Mutation</td><td><span class="rx-type rx-claude">CLAUDE.md</span></td><td>Before any code change: Grep for the symbol, Glob for related files, Read each file</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Dry Run (default)</h3>
+  <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals prescribe</pre>
+  <p style="font-size:.85rem;color:var(--text-dim);margin:.4rem 0">Shows what would be changed without writing anything.</p>
+
+  <h3>Auto-Apply Fixes</h3>
+  <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals prescribe --apply</pre>
+  <p style="font-size:.85rem;color:var(--text-dim);margin:.4rem 0">Writes environment variables, updates settings.json, and appends rules to CLAUDE.md.</p>
+</section>
+
+<!-- SKILLS -->
+<section id="skills">
+  <h2>Skills</h2>
+  <p style="font-size:.85rem;color:var(--text-dim);margin-bottom:1rem">Skills are slash commands that Claude Code can invoke during a session for self-diagnosis.</p>
+  <div class="card-grid">
+    <div class="card">
+      <h3>/vitals</h3>
+      <p>Full diagnostic. Scans logs, checks health, generates a report, and applies behavioral corrections for any degraded metrics.</p>
+    </div>
+    <div class="card">
+      <h3>/vitals-quick</h3>
+      <p>Fast health check. Silent if green &mdash; only reports when something is wrong.</p>
+    </div>
+    <div class="card">
+      <h3>/vitals-report</h3>
+      <p>Generates a GitHub-postable Markdown report with all metrics, trends, and benchmarks.</p>
+    </div>
+    <div class="card">
+      <h3>/vitals-dashboard</h3>
+      <p>Launches the web dashboard in your browser for visual exploration of all metrics.</p>
+    </div>
+  </div>
+  <h3>Install Skills</h3>
+  <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>bash scripts/install.sh</pre>
+  <p style="font-size:.85rem;color:var(--text-dim)">Installs all four commands to <code>~/.claude/commands/</code>. Uninstall with <code>bash scripts/uninstall.sh</code>.</p>
+</section>
+
+<!-- CHANGE TRACKING -->
+<section id="changes">
+  <h2>Change Tracking</h2>
+  <p style="font-size:.85rem;margin-bottom:1rem">Everything above tells you <em>how</em> quality is trending. Change tracking tells you <em>why</em>.</p>
+
+  <h3>Automatic Detection</h3>
+  <p style="font-size:.85rem;color:var(--text-dim)">On every <code>scan</code>, claude-vitals hashes and diffs these files:</p>
+  <ul style="font-size:.85rem;color:var(--text-dim);margin:.5rem 0 1rem 1.5rem">
+    <li><code>~/.claude/CLAUDE.md</code> and per-project CLAUDE.md files</li>
+    <li><code>settings.json</code> (model config, effort level, permissions)</li>
+    <li>Skill files (.md files in skill directories)</li>
+  </ul>
+
+  <h3>Manual Annotations</h3>
+  <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals annotate "Switched to Opus"
+claude-vitals annotate "Rewrote CLAUDE.md testing section"
+claude-vitals annotate "Started 5 concurrent sessions"</pre>
+
+  <h3>Impact Analysis</h3>
+  <p style="font-size:.85rem;color:var(--text-dim);margin:.5rem 0">For every change, compute all 20 metrics for 7 days before and 7 days after:</p>
+  <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals impact 3</pre>
+  <pre style="color:var(--text-dim);font-size:.78rem">Change #3: "Switched to Opus" (2025-06-15)
+
+  Metric              Before    After    Delta
+  ───────────────────────────────────────────
+  Read:Edit Ratio      3.2      6.8     <span style="color:var(--green)">+112%</span>
+  Blind Edit Rate     28.1%     7.3%    <span style="color:var(--green)"> -74%</span>
+  Thinking Depth       840     2,340    <span style="color:var(--green)">+178%</span>
+  Laziness/day          8        1      <span style="color:var(--green)"> -88%</span>
+
+  Verdict: <span style="color:var(--green)">IMPROVED quality across 6/8 key metrics</span></pre>
+</section>
+
+<!-- CONFIGURATION GUIDE -->
+<section id="config">
+  <h2>Configuration Guide</h2>
+
+  <h3>Recommended Environment Variables</h3>
+  <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>export CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING=1
+export MAX_THINKING_TOKENS=31999</pre>
+  <p style="font-size:.82rem;color:var(--text-dim);margin:.3rem 0 1rem">Disables adaptive thinking throttling and sets maximum thinking budget. The single most impactful change you can make.</p>
+
+  <h3>Recommended settings.json</h3>
+  <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>{
+  "effortLevel": "high",
+  "showThinkingSummaries": true
+}</pre>
+  <p style="font-size:.82rem;color:var(--text-dim);margin:.3rem 0 1rem">Forces high-effort responses and makes thinking visible for debugging.</p>
+
+  <h3>CLAUDE.md Best Practices</h3>
+  <p style="font-size:.85rem;color:var(--text-dim);margin-bottom:.5rem">A well-crafted CLAUDE.md prevents most quality issues before they start:</p>
+  <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span># Rules
+
+## Read Before Edit
+- Before ANY edit, read the target file AND at least 2 related files
+- Never edit a file you haven't read in the last 10 tool calls
+- Before any code change: Grep for the symbol, Glob for related files
+
+## Surgical Edits Only
+- Never use Write/CreateFile to modify existing files
+- Use Edit for targeted changes &mdash; preserve surrounding context
+- Full-file rewrites require explicit user approval
+
+## No Laziness
+BANNED PHRASES (never output these):
+- "should I continue?"
+- "want me to keep going?"
+- "shall I proceed?"
+- "good stopping point"
+- "let's pause here"
+- "out of scope for now"
+- "continue in a new session"
+Do the work. Don't ask permission to do the work.
+
+## Resolve Internally
+- Never output "oh wait" / "actually" / "let me reconsider"
+- Resolve contradictions in thinking before producing output
+- If unsure, research more &mdash; don't guess and self-correct</pre>
+</section>
+
+<!-- DASHBOARD -->
+<section id="dashboard">
+  <h2>Dashboard</h2>
+  <p style="font-size:.85rem;margin-bottom:1rem">A single-file, Grafana-inspired web dashboard for visual exploration of all quality metrics.</p>
+  <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals dashboard</pre>
+  <p style="font-size:.85rem;color:var(--text-dim);margin:.5rem 0">Launches a local HTTP server and opens the dashboard in your default browser.</p>
+
+  <h3>Features</h3>
+  <ul style="font-size:.85rem;color:var(--text-dim);margin:.5rem 0 0 1.5rem">
+    <li>Dark theme matching this documentation site</li>
+    <li>Change timeline across the top &mdash; click any change to see its impact overlay</li>
+    <li>6 chart sections: Thinking Depth, Behavioral Ratios, Tool Patterns, User Signals, Session Health, Cost</li>
+    <li>Reference benchmark lines showing good/degraded thresholds</li>
+    <li>React + Recharts rendered from CDN &mdash; no build step</li>
+    <li>Responsive layout for desktop and tablet</li>
+  </ul>
+
+  <div class="callout">The dashboard HTML is a single file at <code>src/dashboard/dashboard.html</code>. Edit it directly &mdash; no build step required.</div>
+</section>
+
+<!-- Footer -->
+<footer>
+  Built on research by <a href="https://github.com/anthropics/claude-code/issues/42796" target="_blank">@stellaraccident</a>
+  &nbsp;&middot;&nbsp; <a href="https://github.com/Okohedeki/claude-vitals/blob/main/LICENSE" target="_blank">MIT License</a>
+  &nbsp;&middot;&nbsp; <a href="https://github.com/Okohedeki/claude-vitals" target="_blank">GitHub</a>
+</footer>
+
+</div><!-- .main -->
+
+<script>
+/* Copy button */
+function copyBlock(btn){
+  const pre=btn.parentElement;
+  const text=pre.textContent.replace(/^copy/,'').trim();
+  navigator.clipboard.writeText(text).then(()=>{
+    btn.textContent='copied';
+    setTimeout(()=>btn.textContent='copy',1500);
+  });
+}
+
+/* Hamburger */
+const hamburger=document.getElementById('hamburger');
+const sidebar=document.getElementById('sidebar');
+hamburger.addEventListener('click',()=>sidebar.classList.toggle('open'));
+sidebar.querySelectorAll('nav a').forEach(a=>{
+  a.addEventListener('click',()=>{if(window.innerWidth<769)sidebar.classList.remove('open')});
+});
+
+/* Active section highlighting */
+const sections=document.querySelectorAll('section[id]');
+const navLinks=document.querySelectorAll('.sidebar nav a');
+const observer=new IntersectionObserver(entries=>{
+  entries.forEach(entry=>{
+    if(entry.isIntersecting){
+      navLinks.forEach(l=>l.classList.remove('active'));
+      const active=document.querySelector('.sidebar nav a[href="#'+entry.target.id+'"]');
+      if(active)active.classList.add('active');
+    }
+  });
+},{rootMargin:'-20% 0px -70% 0px'});
+sections.forEach(s=>observer.observe(s));
+</script>
+</body>
+</html>

@@ -83,12 +83,32 @@ node $VITALS_BIN dashboard
 Dashboard runs at http://localhost:7847.
 SKILLEOF
 
+cat > "$COMMANDS_DIR/vitals-prescribe.md" << SKILLEOF
+# Quality Prescriptions
+
+Analyze degraded metrics and show specific fixes (env vars, settings, CLAUDE.md rules).
+
+\`\`\`bash
+node $VITALS_BIN scan 2>/dev/null
+node $VITALS_BIN prescribe
+\`\`\`
+
+Report the prescriptions to the user. If they want to apply them:
+
+\`\`\`bash
+node $VITALS_BIN prescribe --apply
+\`\`\`
+
+Tell the user what was written and where.
+SKILLEOF
+
 echo ""
-echo "  Installed 4 skills:"
+echo "  Installed 5 skills:"
 echo "    /vitals           — Full diagnostic with corrections"
 echo "    /vitals-quick     — Fast health check"
 echo "    /vitals-report    — GitHub-postable markdown report"
 echo "    /vitals-dashboard — Web dashboard"
+echo "    /vitals-prescribe — Prescribe and apply fixes"
 echo ""
 echo "  Skills point to: $VITALS_BIN"
 echo ""
