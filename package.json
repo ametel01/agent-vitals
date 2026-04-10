@@ -1,0 +1,43 @@
+{
+  "name": "claude-vitals",
+  "version": "1.0.0",
+  "description": "Continuously monitor Claude Code quality by analyzing session logs",
+  "main": "dist/index.js",
+  "bin": {
+    "claude-vitals": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "quality",
+    "monitoring",
+    "session-logs",
+    "ai-coding",
+    "metrics",
+    "dashboard"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "chalk": "^4.1.2",
+    "commander": "^13.1.0",
+    "open": "^8.4.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist/**/*"
+  ]
+}

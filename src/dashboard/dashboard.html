@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Claude Vitals Dashboard</title>
+
+  <!-- React 18 -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Recharts -->
+  <script crossorigin src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+
+  <!-- Babel standalone for JSX -->
+  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0f0f;
+      --card: #1a1a2e;
+      --card-border: #2a2a4a;
+      --text: #e0e0e0;
+      --text-dim: #888;
+      --accent: #00d4ff;
+      --green: #00ff88;
+      --red: #ff4444;
+      --yellow: #ffcc00;
+      --grid-color: #333;
+      --tooltip-bg: #1a1a2e;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
+
+    /* Top bar */
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 24px;
+      background: linear-gradient(180deg, #16162a 0%, #0f0f0f 100%);
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .topbar-title {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      color: var(--accent);
+    }
+
+    .health-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .health-badge.green  { background: rgba(0,255,136,0.15); color: var(--green); border: 1px solid rgba(0,255,136,0.3); }
+    .health-badge.yellow { background: rgba(255,204,0,0.15); color: var(--yellow); border: 1px solid rgba(255,204,0,0.3); }
+    .health-badge.red    { background: rgba(255,68,68,0.15);  color: var(--red);    border: 1px solid rgba(255,68,68,0.3); }
+
+    .health-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    .health-dot.green  { background: var(--green); }
+    .health-dot.yellow { background: var(--yellow); }
+    .health-dot.red    { background: var(--red); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Summary stats */
+    .summary-row {
+      display: flex;
+      gap: 16px;
+      padding: 16px 24px;
+      flex-wrap: wrap;
+    }
+
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 12px 20px;
+      flex: 1;
+      min-width: 160px;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    /* Change timeline */
+    .timeline-container {
+      padding: 8px 24px 16px;
+    }
+
+    .timeline-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+
+    .timeline-bar {
+      position: relative;
+      height: 32px;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      overflow: visible;
+    }
+
+    .timeline-track {
+      position: absolute;
+      top: 50%;
+      left: 16px;
+      right: 16px;
+      height: 2px;
+      background: var(--card-border);
+      transform: translateY(-50%);
+    }
+
+    .timeline-marker {
+      position: absolute;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid var(--card);
+      cursor: pointer;
+      transition: all 0.2s;
+      z-index: 2;
+    }
+
+    .timeline-marker:hover {
+      transform: translate(-50%, -50%) scale(1.5);
+      background: #fff;
+      box-shadow: 0 0 12px var(--accent);
+    }
+
+    .timeline-marker.active {
+      background: #fff;
+      box-shadow: 0 0 12px var(--accent);
+      transform: translate(-50%, -50%) scale(1.4);
+    }
+
+    .timeline-tooltip {
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--tooltip-bg);
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 11px;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 10;
+      margin-bottom: 8px;
+    }
+
+    .timeline-tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 5px solid transparent;
+      border-top-color: var(--accent);
+    }
+
+    /* Alerts bar */
+    .alerts-bar {
+      padding: 0 24px 12px;
+    }
+
+    .alert-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      margin: 2px 4px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+
+    .alert-item.critical { background: rgba(255,68,68,0.12); color: var(--red); }
+    .alert-item.warning  { background: rgba(255,204,0,0.12); color: var(--yellow); }
+
+    /* Section headings */
+    .section-title {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--text-dim);
+      padding: 20px 24px 8px;
+      text-transform: uppercase;
+    }
+
+    /* Chart grid */
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      padding: 0 24px 24px;
+    }
+
+    @media (max-width: 900px) {
+      .chart-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Chart card */
+    .chart-card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 16px;
+      transition: border-color 0.3s;
+    }
+
+    .chart-card:hover {
+      border-color: rgba(0,212,255,0.3);
+    }
+
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 8px;
+    }
+
+    .chart-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+    }
+
+    .chart-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    /* Custom recharts tooltip */
+    .custom-tooltip {
+      background: var(--tooltip-bg) !important;
+      border: 1px solid var(--card-border) !important;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 11px;
+    }
+
+    .custom-tooltip .label {
+      color: var(--text-dim);
+      margin-bottom: 4px;
+    }
+
+    .custom-tooltip .value {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* Loading */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--card-border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const {
+      LineChart, Line, AreaChart, Area, BarChart, Bar,
+      XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+      ReferenceLine, Legend
+    } = Recharts;
+
+    // -----------------------------------------------------------------------
+    // Constants
+    // -----------------------------------------------------------------------
+
+    const COLORS = {
+      primary: '#00d4ff',
+      green: '#00ff88',
+      red: '#ff4444',
+      yellow: '#ffcc00',
+      grid: '#333',
+      tooltipBg: '#1a1a2e',
+      dimText: '#888',
+    };
+
+    const METRIC_SECTIONS = [
+      {
+        title: 'THINKING',
+        metrics: [
+          { key: 'thinking_depth_median', label: 'Thinking Depth (median)', format: 'depth', refs: [{ val: 2200, label: 'Good', color: COLORS.green }, { val: 600, label: 'Degraded', color: COLORS.red }] },
+          { key: 'thinking_depth_redacted_pct', label: 'Redacted Thinking %', format: 'pct', chartType: 'area' },
+        ],
+      },
+      {
+        title: 'BEHAVIOR',
+        metrics: [
+          { key: 'read_edit_ratio', label: 'Read : Edit Ratio', format: 'ratio', refs: [{ val: 6.6, label: 'Good', color: COLORS.green }, { val: 2.0, label: 'Degraded', color: COLORS.red }] },
+          { key: 'blind_edit_rate', label: 'Blind Edit Rate', format: 'pct', refs: [{ val: 6.2, label: 'Good', color: COLORS.green }, { val: 33.7, label: 'Degraded', color: COLORS.red }] },
+          { key: 'first_tool_read_pct', label: 'First Tool = Read %', format: 'pct', chartType: 'bar' },
+          { key: 'research_mutation_ratio', label: 'Research : Mutation Ratio', format: 'ratio', refs: [{ val: 8.7, label: 'Good', color: COLORS.green }, { val: 2.8, label: 'Degraded', color: COLORS.red }] },
+        ],
+      },
+      {
+        title: 'QUALITY SIGNALS',
+        metrics: [
+          { key: 'reasoning_loops_per_1k', label: 'Reasoning Loops / 1k', format: 'ratio', refs: [{ val: 8.2, label: 'Good', color: COLORS.green }, { val: 26.6, label: 'Degraded', color: COLORS.red }] },
+          { key: 'laziness_total', label: 'Laziness Violations', format: 'count', refs: [{ val: 0, label: 'Good', color: COLORS.green }, { val: 10, label: 'Degraded', color: COLORS.red }] },
+          { key: 'self_admitted_failures_per_1k', label: 'Self-Admitted Failures / 1k', format: 'ratio', refs: [{ val: 0.1, label: 'Good', color: COLORS.green }, { val: 0.5, label: 'Degraded', color: COLORS.red }] },
+          { key: 'user_interrupts_per_1k', label: 'User Interrupts / 1k', format: 'ratio', refs: [{ val: 0.9, label: 'Good', color: COLORS.green }, { val: 11.4, label: 'Degraded', color: COLORS.red }] },
+        ],
+      },
+      {
+        title: 'USER EXPERIENCE',
+        metrics: [
+          { key: 'sentiment_ratio', label: 'Sentiment Ratio (+/-)', format: 'ratio', refs: [{ val: 4.4, label: 'Good', color: COLORS.green }, { val: 3.0, label: 'Degraded', color: COLORS.red }] },
+          { key: 'frustration_rate', label: 'Frustration Rate', format: 'pct', refs: [{ val: 5.8, label: 'Good', color: COLORS.green }, { val: 9.8, label: 'Degraded', color: COLORS.red }] },
+          { key: 'session_autonomy_median', label: 'Session Autonomy (min)', format: 'ratio' },
+          { key: 'prompts_per_session', label: 'Prompts / Session', format: 'ratio', refs: [{ val: 35.9, label: 'Good', color: COLORS.green }, { val: 27.9, label: 'Degraded', color: COLORS.red }] },
+        ],
+      },
+      {
+        title: 'EFFICIENCY',
+        metrics: [
+          { key: 'cost_estimate', label: 'Daily Cost Estimate', format: 'currency' },
+          { key: 'edit_churn_rate', label: 'Edit Churn Rate', format: 'pct' },
+          { key: 'bash_success_rate', label: 'Bash Success Rate', format: 'pct' },
+          { key: 'subagent_pct', label: 'Sub-agent Usage %', format: 'pct' },
+        ],
+      },
+      {
+        title: 'CONTEXT',
+        metrics: [
+          { key: 'context_pressure', label: 'Context Pressure', format: 'ratio' },
+        ],
+      },
+    ];
+
+    // -----------------------------------------------------------------------
+    // Formatters
+    // -----------------------------------------------------------------------
+
+    function formatMetricValue(value, format) {
+      if (value == null || isNaN(value)) return '--';
+      switch (format) {
+        case 'ratio': return value.toFixed(1);
+        case 'count': return Math.round(value).toString();
+        case 'pct': return value.toFixed(1) + '%';
+        case 'currency': return '$' + value.toFixed(2);
+        case 'depth': return Math.round(value).toLocaleString();
+        default: return value.toFixed(2);
+      }
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      const d = new Date(dateStr + 'T00:00:00');
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+
+    // -----------------------------------------------------------------------
+    // Custom Tooltip
+    // -----------------------------------------------------------------------
+
+    function CustomTooltip({ active, payload, label, format }) {
+      if (!active || !payload || !payload.length) return null;
+      return (
+        <div className="custom-tooltip">
+          <div className="label">{formatDate(label)}</div>
+          {payload.map((p, i) => (
+            <div key={i} className="value" style={{ color: p.color || COLORS.primary }}>
+              {formatMetricValue(p.value, format)}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // MetricChart
+    // -----------------------------------------------------------------------
+
+    function MetricChart({ metricDef, data, activeChangeDate }) {
+      const { key, label, format, refs, chartType } = metricDef;
+
+      const chartData = data
+        .filter(d => d.metric_name === key)
+        .map(d => ({ date: d.date, value: d.value }));
+
+      const latestValue = chartData.length > 0
+        ? chartData[chartData.length - 1].value
+        : null;
+
+      const commonProps = {
+        data: chartData,
+        margin: { top: 8, right: 12, left: 0, bottom: 4 },
+      };
+
+      const xAxisProps = {
+        dataKey: 'date',
+        tick: { fontSize: 9, fill: COLORS.dimText },
+        tickFormatter: formatDate,
+        stroke: COLORS.grid,
+        tickLine: false,
+        minTickGap: 40,
+      };
+
+      const yAxisProps = {
+        tick: { fontSize: 9, fill: COLORS.dimText },
+        stroke: COLORS.grid,
+        tickLine: false,
+        axisLine: false,
+        width: 45,
+      };
+
+      const gridProps = {
+        strokeDasharray: '3 3',
+        stroke: 'rgba(51,51,51,0.5)',
+        vertical: false,
+      };
+
+      const tooltipProps = {
+        content: <CustomTooltip format={format} />,
+        cursor: { stroke: 'rgba(0,212,255,0.2)', strokeWidth: 1 },
+      };
+
+      const referenceLines = (refs || []).map((r, i) => (
+        <ReferenceLine
+          key={`ref-${i}`}
+          y={r.val}
+          stroke={r.color}
+          strokeDasharray="6 3"
+          strokeOpacity={0.5}
+          label={{
+            value: r.label + ' ' + r.val,
+            position: 'right',
+            fill: r.color,
+            fontSize: 9,
+            opacity: 0.7,
+          }}
+        />
+      ));
+
+      const changeOverlay = activeChangeDate ? (
+        <ReferenceLine
+          x={activeChangeDate}
+          stroke={COLORS.yellow}
+          strokeDasharray="4 4"
+          strokeWidth={2}
+          label={{
+            value: '',
+            position: 'top',
+          }}
+        />
+      ) : null;
+
+      let chart;
+
+      if (chartType === 'area') {
+        chart = (
+          <AreaChart {...commonProps}>
+            <CartesianGrid {...gridProps} />
+            <XAxis {...xAxisProps} />
+            <YAxis {...yAxisProps} />
+            <Tooltip {...tooltipProps} />
+            {referenceLines}
+            {changeOverlay}
+            <defs>
+              <linearGradient id={`grad-${key}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.3} />
+                <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <Area
+              type="monotone"
+              dataKey="value"
+              stroke={COLORS.primary}
+              strokeWidth={2}
+              fill={`url(#grad-${key})`}
+              dot={false}
+              activeDot={{ r: 4, fill: COLORS.primary }}
+            />
+          </AreaChart>
+        );
+      } else if (chartType === 'bar') {
+        chart = (
+          <BarChart {...commonProps}>
+            <CartesianGrid {...gridProps} />
+            <XAxis {...xAxisProps} />
+            <YAxis {...yAxisProps} />
+            <Tooltip {...tooltipProps} />
+            {referenceLines}
+            {changeOverlay}
+            <Bar
+              dataKey="value"
+              fill={COLORS.primary}
+              radius={[2, 2, 0, 0]}
+              maxBarSize={12}
+            />
+          </BarChart>
+        );
+      } else {
+        chart = (
+          <LineChart {...commonProps}>
+            <CartesianGrid {...gridProps} />
+            <XAxis {...xAxisProps} />
+            <YAxis {...yAxisProps} />
+            <Tooltip {...tooltipProps} />
+            {referenceLines}
+            {changeOverlay}
+            <Line
+              type="monotone"
+              dataKey="value"
+              stroke={COLORS.primary}
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4, fill: COLORS.primary, stroke: '#fff', strokeWidth: 1 }}
+            />
+          </LineChart>
+        );
+      }
+
+      return (
+        <div className="chart-card">
+          <div className="chart-header">
+            <span className="chart-title">{label}</span>
+            <span className="chart-value">{formatMetricValue(latestValue, format)}</span>
+          </div>
+          <ResponsiveContainer width="100%" height={180}>
+            {chart}
+          </ResponsiveContainer>
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // ChangeTimeline
+    // -----------------------------------------------------------------------
+
+    function ChangeTimeline({ changes, metricsData, activeChangeId, onSelectChange }) {
+      const [hoveredId, setHoveredId] = React.useState(null);
+
+      if (!changes || changes.length === 0 || !metricsData || metricsData.length === 0) {
+        return null;
+      }
+
+      // Get date range from metrics data
+      const dates = metricsData.map(d => d.date);
+      const minDate = dates[0];
+      const maxDate = dates[dates.length - 1];
+      const minTime = new Date(minDate + 'T00:00:00').getTime();
+      const maxTime = new Date(maxDate + 'T00:00:00').getTime();
+      const range = maxTime - minTime || 1;
+
+      return (
+        <div className="timeline-container">
+          <div className="timeline-label">Change Timeline</div>
+          <div className="timeline-bar">
+            <div className="timeline-track" />
+            {changes.map(change => {
+              const changeDate = change.timestamp.substring(0, 10);
+              const changeTime = new Date(changeDate + 'T00:00:00').getTime();
+              const pct = ((changeTime - minTime) / range) * 100;
+              const clampedPct = Math.max(1, Math.min(99, pct));
+              const isActive = activeChangeId === change.id;
+              const isHovered = hoveredId === change.id;
+
+              return (
+                <div key={change.id} style={{ position: 'absolute', left: `calc(16px + ${clampedPct}% * (1 - 32px / 100%))`, top: 0, bottom: 0 }}>
+                  <div
+                    className={`timeline-marker ${isActive ? 'active' : ''}`}
+                    style={{ position: 'absolute', top: '50%', left: '50%', transform: `translate(-50%, -50%)${isActive ? ' scale(1.4)' : ''}` }}
+                    onClick={() => onSelectChange(isActive ? null : change)}
+                    onMouseEnter={() => setHoveredId(change.id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                  />
+                  {(isHovered || isActive) && (
+                    <div className="timeline-tooltip" style={{ position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', marginBottom: '24px' }}>
+                      <div style={{ color: COLORS.primary, fontWeight: 600 }}>
+                        {changeDate}
+                      </div>
+                      <div style={{ color: '#e0e0e0', maxWidth: 280, whiteSpace: 'normal', marginTop: 2 }}>
+                        [{change.type}] {change.description}
+                      </div>
+                      {change.impacts && change.impacts.length > 0 && (
+                        <div style={{ marginTop: 4, fontSize: 10, color: COLORS.dimText }}>
+                          {change.impacts.filter(i => i.verdict === 'improved').length} improved,{' '}
+                          {change.impacts.filter(i => i.verdict === 'degraded').length} degraded
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // App
+    // -----------------------------------------------------------------------
+
+    function App() {
+      const [metrics, setMetrics] = React.useState([]);
+      const [changes, setChanges] = React.useState([]);
+      const [health, setHealth] = React.useState(null);
+      const [sessions, setSessions] = React.useState(null);
+      const [loading, setLoading] = React.useState(true);
+      const [error, setError] = React.useState(null);
+      const [activeChange, setActiveChange] = React.useState(null);
+
+      React.useEffect(() => {
+        Promise.all([
+          fetch('/api/metrics').then(r => r.json()),
+          fetch('/api/changes').then(r => r.json()),
+          fetch('/api/health').then(r => r.json()),
+          fetch('/api/sessions').then(r => r.json()),
+        ])
+          .then(([m, c, h, s]) => {
+            setMetrics(m);
+            setChanges(c);
+            setHealth(h);
+            setSessions(s);
+            setLoading(false);
+          })
+          .catch(err => {
+            setError(err.message);
+            setLoading(false);
+          });
+      }, []);
+
+      if (loading) {
+        return (
+          <div className="loading">
+            <div className="loading-spinner" />
+            <div style={{ color: COLORS.dimText }}>Loading dashboard...</div>
+          </div>
+        );
+      }
+
+      if (error) {
+        return (
+          <div className="loading">
+            <div style={{ color: COLORS.red, fontSize: 16 }}>Error: {error}</div>
+            <div style={{ color: COLORS.dimText, marginTop: 8 }}>
+              Make sure the API server is running.
+            </div>
+          </div>
+        );
+      }
+
+      const healthStatus = health ? health.status : 'green';
+      const healthMsg = health ? health.message : '';
+      const alerts = health ? (health.alerts || []) : [];
+
+      const activeChangeDate = activeChange
+        ? activeChange.timestamp.substring(0, 10)
+        : null;
+
+      return (
+        <div>
+          {/* Top Bar */}
+          <div className="topbar">
+            <div className="topbar-title">CLAUDE VITALS</div>
+            <div className={`health-badge ${healthStatus}`}>
+              <div className={`health-dot ${healthStatus}`} />
+              {healthStatus === 'green' ? 'Healthy' : healthStatus === 'yellow' ? 'Warning' : 'Critical'}
+            </div>
+          </div>
+
+          {/* Summary Stats */}
+          <div className="summary-row">
+            <div className="stat-card">
+              <div className="stat-label">Sessions Scanned</div>
+              <div className="stat-value">{sessions ? sessions.count.toLocaleString() : '--'}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Tool Calls</div>
+              <div className="stat-value">{sessions ? sessions.toolCalls.toLocaleString() : '--'}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Date Range</div>
+              <div className="stat-value" style={{ fontSize: 14 }}>
+                {sessions && sessions.dateRange && sessions.dateRange.min
+                  ? `${formatDate(sessions.dateRange.min)} - ${formatDate(sessions.dateRange.max)}`
+                  : '--'}
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Alerts</div>
+              <div className="stat-value" style={{ color: alerts.length > 0 ? COLORS.red : COLORS.green }}>
+                {alerts.length}
+              </div>
+            </div>
+          </div>
+
+          {/* Change Timeline */}
+          <ChangeTimeline
+            changes={changes}
+            metricsData={metrics}
+            activeChangeId={activeChange ? activeChange.id : null}
+            onSelectChange={setActiveChange}
+          />
+
+          {/* Active change info */}
+          {activeChange && (
+            <div style={{ padding: '0 24px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{
+                background: 'rgba(255,204,0,0.1)',
+                border: '1px solid rgba(255,204,0,0.3)',
+                borderRadius: 6,
+                padding: '6px 12px',
+                fontSize: 11,
+                color: COLORS.yellow,
+                flex: 1,
+              }}>
+                Showing change overlay: <strong>[{activeChange.type}]</strong> {activeChange.description}
+                <span
+                  style={{ marginLeft: 12, cursor: 'pointer', opacity: 0.6 }}
+                  onClick={() => setActiveChange(null)}
+                >
+                  [clear]
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Alerts */}
+          {alerts.length > 0 && (
+            <div className="alerts-bar">
+              {alerts.map((alert, i) => (
+                <span key={i} className={`alert-item ${alert.severity}`}>
+                  {alert.severity === 'critical' ? '\u2718' : '\u26A0'} {alert.message}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Metric Sections */}
+          {METRIC_SECTIONS.map(section => (
+            <div key={section.title}>
+              <div className="section-title">{section.title}</div>
+              <div className="chart-grid">
+                {section.metrics.map(metric => (
+                  <MetricChart
+                    key={metric.key}
+                    metricDef={metric}
+                    data={metrics}
+                    activeChangeDate={activeChangeDate}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {/* Footer */}
+          <div style={{ textAlign: 'center', padding: '24px', color: COLORS.dimText, fontSize: 11 }}>
+            Claude Vitals Dashboard &middot; Data refreshed on page load
+          </div>
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // Mount
+    // -----------------------------------------------------------------------
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
