@@ -1,9 +1,24 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import type {
+  DiscoveredSessionLog,
+  LazinessCategory,
+  ParsedAssistantMessage,
+  ParsedSessionLog,
+  ParsedSystemMessage,
+  ParsedThinkingBlock,
+  ParsedToolCall,
+  ParsedToolResult,
+  ParsedUserMessage,
+  SessionLogAdapter,
+  TextPatternMatch,
+  ToolCategory,
+  UserPromptSentiment,
+} from './types';
 
 // ---------------------------------------------------------------------------
-// Types — JSONL line shapes (raw from Claude Code session logs)
+// Raw JSONL line shapes (Claude Code-specific on-disk format)
 // ---------------------------------------------------------------------------
 
 /** Content block types found in assistant message.content arrays */
@@ -33,8 +48,8 @@ export interface ToolResultBlock {
 
 export type ContentBlock = ThinkingBlock | TextBlock | ToolUseBlock | ToolResultBlock;
 
-/** Usage object on assistant messages */
-export interface MessageUsage {
+/** Usage object on assistant messages (Claude on-disk shape) */
+export interface ClaudeMessageUsage {
   input_tokens: number;
   output_tokens: number;
   cache_creation_input_tokens?: number;
@@ -50,7 +65,7 @@ export interface InnerMessage {
   role: string;
   content: string | ContentBlock[];
   model?: string;
-  usage?: MessageUsage;
+  usage?: ClaudeMessageUsage;
 }
 
 /** A single JSONL line (union of all entry types) */
@@ -75,128 +90,6 @@ export interface RawLogEntry {
   sourceToolAssistantUUID?: string;
   durationMs?: number;
   [key: string]: unknown;
-}
-
-// ---------------------------------------------------------------------------
-// Parsed output types
-// ---------------------------------------------------------------------------
-
-export type ToolCategory = 'read' | 'edit' | 'write' | 'search' | 'bash' | 'agent' | 'other';
-
-export type LazinessCategory =
-  | 'OWNERSHIP_DODGING'
-  | 'PERMISSION_SEEKING'
-  | 'PREMATURE_STOPPING'
-  | 'KNOWN_LIMITATION'
-  | 'SESSION_LENGTH';
-
-export interface ParsedToolCall {
-  toolName: string;
-  toolUseId: string;
-  input: Record<string, unknown>;
-  targetFile: string | null;
-  category: ToolCategory;
-  isMutation: boolean;
-  isResearch: boolean;
-  /** For bash tools only */
-  bashCommand: string | null;
-  bashIsBuild: boolean;
-  bashIsTest: boolean;
-  bashIsGit: boolean;
-}
-
-export interface ParsedThinkingBlock {
-  isRedacted: boolean;
-  contentLength: number;
-  signatureLength: number;
-}
-
-export interface ParsedToolResult {
-  toolUseId: string;
-  content: string;
-  contentLength: number;
-  isError: boolean;
-}
-
-export interface TextPatternMatch {
-  phrase: string;
-  surroundingText: string;
-}
-
-export interface ParsedAssistantMessage {
-  uuid: string | null;
-  parentUuid: string | null;
-  isSidechain: boolean;
-  timestamp: string | null;
-  requestId: string | null;
-  model: string | null;
-  usage: MessageUsage | null;
-  textContent: string;
-  textContentLength: number;
-  toolCalls: ParsedToolCall[];
-  thinkingBlocks: ParsedThinkingBlock[];
-  isInterrupt: boolean;
-  reasoningLoops: TextPatternMatch[];
-  lazinessViolations: Array<TextPatternMatch & { category: LazinessCategory }>;
-  selfAdmittedFailures: TextPatternMatch[];
-}
-
-export interface UserPromptSentiment {
-  positiveWordCount: number;
-  negativeWordCount: number;
-  hasFrustration: boolean;
-}
-
-export interface ParsedUserMessage {
-  uuid: string | null;
-  parentUuid: string | null;
-  isSidechain: boolean;
-  timestamp: string | null;
-  promptId: string | null;
-  cwd: string | null;
-  sessionId: string | null;
-  version: string | null;
-  gitBranch: string | null;
-  /** True if this is a real human prompt (not a tool result) */
-  isHumanPrompt: boolean;
-  contentText: string;
-  contentLength: number;
-  wordCount: number;
-  isInterrupt: boolean;
-  sentiment: UserPromptSentiment;
-  /** Present only for tool result messages */
-  toolResults: ParsedToolResult[];
-}
-
-export interface ParsedSystemMessage {
-  uuid: string | null;
-  timestamp: string | null;
-  subtype: string | null;
-  durationMs: number | null;
-}
-
-export interface SessionMetadata {
-  sessionId: string | null;
-  projectPath: string;
-  projectName: string | null;
-  startedAt: string | null;
-  endedAt: string | null;
-  model: string | null;
-  version: string | null;
-  cwd: string | null;
-  gitBranch: string | null;
-}
-
-export interface ParsedSessionLog {
-  filePath: string;
-  metadata: SessionMetadata;
-  userMessages: ParsedUserMessage[];
-  assistantMessages: ParsedAssistantMessage[];
-  systemMessages: ParsedSystemMessage[];
-  totalMessages: number;
-  totalUserPrompts: number;
-  totalToolCalls: number;
-  parseErrors: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -732,7 +625,7 @@ function extractSessionIdFromPath(filePath: string): string | null {
  * Reads the file synchronously, splits by newline, and parses each JSON line.
  * Malformed lines are silently skipped (counted in parseErrors).
  */
-export function parseSessionLog(filePath: string): ParsedSessionLog {
+export function parseClaudeSessionLog(filePath: string): ParsedSessionLog {
   const { projectPath, projectName } = extractProjectInfoFromPath(filePath);
 
   const result: ParsedSessionLog = {
@@ -885,7 +778,7 @@ function collectJsonlFiles(dir: string): string[] {
  *
  * Returns absolute paths to all discovered .jsonl files.
  */
-export function discoverSessionLogs(): string[] {
+export function discoverClaudeSessionLogs(): string[] {
   const allFiles: string[] = [];
   const isWindows = process.platform === 'win32';
 
@@ -954,4 +847,47 @@ export function discoverSessionLogs(): string[] {
   }
 
   return deduplicated;
+}
+
+// ---------------------------------------------------------------------------
+// Adapter
+// ---------------------------------------------------------------------------
+
+const CLAUDE_SESSION_ID_RE =
+  /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i;
+
+function extractClaudeSessionId(filePath: string): string | null {
+  const match = filePath.match(CLAUDE_SESSION_ID_RE);
+  return match ? match[1] : null;
+}
+
+export class ClaudeAdapter implements SessionLogAdapter {
+  readonly provider = 'claude' as const;
+
+  discover(): DiscoveredSessionLog[] {
+    const files = discoverClaudeSessionLogs();
+    const discovered: DiscoveredSessionLog[] = [];
+    for (const filePath of files) {
+      const sessionId = extractClaudeSessionId(filePath);
+      if (!sessionId) continue;
+      let stat: fs.Stats;
+      try {
+        stat = fs.statSync(filePath);
+      } catch {
+        continue;
+      }
+      discovered.push({
+        provider: this.provider,
+        filePath,
+        sessionId,
+        mtimeMs: Math.floor(stat.mtimeMs),
+        sizeBytes: stat.size,
+      });
+    }
+    return discovered;
+  }
+
+  parse(filePath: string): ParsedSessionLog {
+    return parseClaudeSessionLog(filePath);
+  }
 }

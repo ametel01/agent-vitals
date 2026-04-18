@@ -1,7 +1,11 @@
-import fs from 'node:fs';
 import chalk from 'chalk';
 import type { VitalsDB } from '../db/database';
-import { discoverSessionLogs, type ParsedSessionLog, parseSessionLog } from './log-parser';
+import type {
+  DiscoveredSessionLog,
+  ParsedSessionLog,
+  SessionLogAdapter,
+  SessionProvider,
+} from './types';
 
 // Signature-to-content correlation factor from the original analysis (r=0.97)
 const SIGNATURE_TO_CONTENT_RATIO = 4.26;
@@ -10,95 +14,91 @@ function getErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+export type SourceFilter = SessionProvider | 'all';
+
+export interface ScanOptions {
+  force?: boolean;
+  verbose?: boolean;
+  /** Which registered adapter(s) to run. Defaults to running every registered adapter. */
+  source?: SourceFilter;
+}
+
+export interface ScanResult {
+  scanned: number;
+  skipped: number;
+  errors: number;
+}
+
 export class Scanner {
   private db: VitalsDB;
+  private adapters: SessionLogAdapter[];
 
-  constructor(db: VitalsDB) {
+  constructor(db: VitalsDB, adapters: SessionLogAdapter[]) {
     this.db = db;
+    this.adapters = adapters;
   }
 
-  scan(options: { force?: boolean; verbose?: boolean } = {}): {
-    scanned: number;
-    skipped: number;
-    errors: number;
-  } {
-    const logFiles = discoverSessionLogs();
-    let scanned = 0,
-      skipped = 0,
-      errors = 0;
+  scan(options: ScanOptions = {}): ScanResult {
+    const source = options.source ?? 'all';
+    const selected =
+      source === 'all' ? this.adapters : this.adapters.filter((a) => a.provider === source);
 
-    if (options.verbose) {
-      console.log(chalk.gray(`Found ${logFiles.length} session log files`));
+    if (selected.length === 0) {
+      if (options.verbose) {
+        console.log(chalk.yellow(`No registered adapters match source "${source}"`));
+      }
+      return { scanned: 0, skipped: 0, errors: 0 };
     }
 
-    for (const filePath of logFiles) {
-      const sessionId = this.extractSessionId(filePath);
-      if (!sessionId) {
-        errors++;
-        continue;
+    let scanned = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    for (const adapter of selected) {
+      const discovered = adapter.discover();
+      if (options.verbose) {
+        console.log(
+          chalk.gray(`Found ${discovered.length} ${adapter.provider} session log file(s)`),
+        );
       }
 
-      let stat: fs.Stats;
-      try {
-        stat = fs.statSync(filePath);
-      } catch (err: unknown) {
-        if (options.verbose) {
-          console.log(chalk.red(`  Error stat ${filePath}: ${getErrorMessage(err)}`));
-        }
-        errors++;
-        continue;
-      }
-      const mtimeMs = Math.floor(stat.mtimeMs);
-      const sizeBytes = stat.size;
-
-      if (!options.force) {
-        const existing = this.db.getSessionSourceMeta(sessionId);
-        if (
-          existing &&
-          existing.source_mtime_ms === mtimeMs &&
-          existing.source_size_bytes === sizeBytes
-        ) {
-          skipped++;
-          continue;
-        }
-      }
-
-      try {
-        if (options.verbose) {
-          console.log(chalk.gray(`  Scanning: ${filePath}`));
+      for (const entry of discovered) {
+        if (!options.force) {
+          const existing = this.db.getSessionSourceMeta(entry.sessionId);
+          if (
+            existing &&
+            existing.source_mtime_ms === entry.mtimeMs &&
+            existing.source_size_bytes === entry.sizeBytes
+          ) {
+            skipped++;
+            continue;
+          }
         }
 
-        const parsed = parseSessionLog(filePath);
-        this.ingestParsedSession(parsed, filePath, sessionId, mtimeMs, sizeBytes);
-        scanned++;
-      } catch (err: unknown) {
-        if (options.verbose) {
-          console.log(chalk.red(`  Error scanning ${filePath}: ${getErrorMessage(err)}`));
+        try {
+          if (options.verbose) {
+            console.log(chalk.gray(`  Scanning: ${entry.filePath}`));
+          }
+          const parsed = adapter.parse(entry.filePath);
+          this.ingestParsedSession(parsed, entry);
+          scanned++;
+        } catch (err: unknown) {
+          if (options.verbose) {
+            console.log(chalk.red(`  Error scanning ${entry.filePath}: ${getErrorMessage(err)}`));
+          }
+          errors++;
         }
-        errors++;
       }
     }
 
     return { scanned, skipped, errors };
   }
 
-  private extractSessionId(filePath: string): string | null {
-    const match = filePath.match(
-      /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i,
-    );
-    return match ? match[1] : null;
-  }
-
-  private ingestParsedSession(
-    parsed: ParsedSessionLog,
-    filePath: string,
-    fallbackSessionId: string,
-    sourceMtimeMs: number,
-    sourceSizeBytes: number,
-  ) {
-    const projectPath = this.extractProjectPath(filePath);
-    const projectName = this.extractProjectName(projectPath);
-    const sessionId = parsed.metadata.sessionId || fallbackSessionId;
+  private ingestParsedSession(parsed: ParsedSessionLog, discovered: DiscoveredSessionLog) {
+    const filePath = discovered.filePath;
+    const projectPath = parsed.metadata.projectPath || this.extractProjectPath(filePath);
+    const projectName = parsed.metadata.projectName || this.extractProjectName(projectPath);
+    const sessionId = parsed.metadata.sessionId || discovered.sessionId;
 
     // Collect human prompts from user messages
     const humanPrompts = parsed.userMessages.filter((m) => m.isHumanPrompt);
@@ -134,9 +134,9 @@ export class Scanner {
         total_user_prompts: humanPrompts.length,
         total_tool_calls: parsed.totalToolCalls,
         source_path: filePath,
-        source_mtime_ms: sourceMtimeMs,
-        source_size_bytes: sourceSizeBytes,
-        provider: 'claude',
+        source_mtime_ms: discovered.mtimeMs,
+        source_size_bytes: discovered.sizeBytes,
+        provider: discovered.provider,
       });
 
       // Insert user prompts

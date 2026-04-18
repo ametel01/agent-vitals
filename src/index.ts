@@ -10,7 +10,8 @@ import { Prescriber } from './prescriptions/prescriber';
 import { RegressionDetector } from './regression/detector';
 import { MarkdownReport } from './reports/markdown';
 import { TerminalReport } from './reports/terminal';
-import { Scanner } from './scanner/scanner';
+import { ClaudeAdapter } from './scanner/claude-adapter';
+import { Scanner, type SourceFilter } from './scanner/scanner';
 
 const program = new Command();
 
@@ -20,19 +21,43 @@ program
   .version('1.1.0');
 
 // --- scan ---
+function createSessionAdapters() {
+  return [new ClaudeAdapter()];
+}
+
 program
   .command('scan')
-  .description('Ingest Claude Code session logs into the database')
+  .description('Ingest agent session logs into the database')
   .option('-f, --force', 'Re-scan all sessions, even previously scanned ones')
   .option('-v, --verbose', 'Show detailed progress')
+  .option('--source <source>', 'Session source: claude or all', 'claude')
   .option('--db <path>', 'Custom database path')
   .action((opts) => {
+    const source = opts.source as string;
+    const adapters = createSessionAdapters();
+    const availableSources = new Set<SourceFilter>([
+      'all',
+      ...adapters.map((adapter) => adapter.provider),
+    ]);
+    if (!availableSources.has(source as SourceFilter)) {
+      console.error(
+        chalk.red(
+          `Unsupported --source "${source}". Available sources: ${Array.from(availableSources).join(', ')}.`,
+        ),
+      );
+      process.exit(1);
+    }
+
     const db = new VitalsDB(opts.db);
     try {
-      console.log(chalk.bold('Scanning Claude Code session logs...\n'));
+      console.log(chalk.bold(`Scanning ${source} session logs...\n`));
 
-      const scanner = new Scanner(db);
-      const result = scanner.scan({ force: opts.force, verbose: opts.verbose });
+      const scanner = new Scanner(db, adapters);
+      const result = scanner.scan({
+        force: opts.force,
+        verbose: opts.verbose,
+        source: source as SourceFilter,
+      });
 
       console.log(chalk.green(`\n✓ Scanned: ${result.scanned} sessions`));
       if (result.skipped > 0)
