@@ -1,9 +1,13 @@
-import { VitalsDB } from '../db/database';
-import { RegressionDetector } from '../regression/detector';
-import http from 'http';
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import http from 'node:http';
+import path from 'node:path';
 import chalk from 'chalk';
+import type { VitalsDB } from '../db/database';
+import { RegressionDetector } from '../regression/detector';
+
+function getErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 function resolveHtmlPath(): string {
   // First try next to the compiled JS (dist/dashboard/dashboard.html)
@@ -14,9 +18,7 @@ function resolveHtmlPath(): string {
   const inSourceTree = path.join(__dirname, '..', '..', 'src', 'dashboard', 'dashboard.html');
   if (fs.existsSync(inSourceTree)) return inSourceTree;
 
-  throw new Error(
-    `Cannot find dashboard.html. Looked at:\n  ${nextToCompiled}\n  ${inSourceTree}`
-  );
+  throw new Error(`Cannot find dashboard.html. Looked at:\n  ${nextToCompiled}\n  ${inSourceTree}`);
 }
 
 export function serveDashboard(db: VitalsDB, port: number) {
@@ -52,7 +54,7 @@ export function serveDashboard(db: VitalsDB, port: number) {
 
       if (url === '/api/changes') {
         const changes = db.getAllChanges();
-        const changesWithImpact = changes.map(change => ({
+        const changesWithImpact = changes.map((change) => ({
           ...change,
           impacts: db.getImpactResults(change.id),
         }));
@@ -83,10 +85,11 @@ export function serveDashboard(db: VitalsDB, port: number) {
       // 404 for anything else
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
-    } catch (err: any) {
-      console.error(chalk.red('Dashboard server error:'), err.message);
+    } catch (err: unknown) {
+      const message = getErrorMessage(err);
+      console.error(chalk.red('Dashboard server error:'), message);
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
+      res.end(JSON.stringify({ error: message }));
     }
   });
 

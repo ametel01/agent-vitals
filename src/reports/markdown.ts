@@ -1,4 +1,5 @@
-import { VitalsDB } from '../db/database';
+import type { VitalsDB } from '../db/database';
+import { RegressionDetector } from '../regression/detector';
 
 // ---------------------------------------------------------------------------
 // Types & constants
@@ -13,21 +14,103 @@ interface MetricDef {
 }
 
 const ALL_METRICS: MetricDef[] = [
-  { key: 'thinking_depth_median', label: 'Thinking Depth (median)', higherIsBetter: true, format: 'depth', benchmark: [2200, 600] },
-  { key: 'thinking_depth_redacted_pct', label: 'Redacted Thinking %', higherIsBetter: false, format: 'pct' },
-  { key: 'read_edit_ratio', label: 'Read : Edit Ratio', higherIsBetter: true, format: 'ratio', benchmark: [6.6, 2.0] },
-  { key: 'research_mutation_ratio', label: 'Research : Mutation Ratio', higherIsBetter: true, format: 'ratio', benchmark: [8.7, 2.8] },
-  { key: 'blind_edit_rate', label: 'Blind Edit Rate', higherIsBetter: false, format: 'pct', benchmark: [6.2, 33.7] },
-  { key: 'write_vs_edit_pct', label: 'Write vs Edit %', higherIsBetter: false, format: 'pct', benchmark: [4.9, 11.1] },
+  {
+    key: 'thinking_depth_median',
+    label: 'Thinking Depth (median)',
+    higherIsBetter: true,
+    format: 'depth',
+    benchmark: [2200, 600],
+  },
+  {
+    key: 'thinking_depth_redacted_pct',
+    label: 'Redacted Thinking %',
+    higherIsBetter: false,
+    format: 'pct',
+  },
+  {
+    key: 'read_edit_ratio',
+    label: 'Read : Edit Ratio',
+    higherIsBetter: true,
+    format: 'ratio',
+    benchmark: [6.6, 2.0],
+  },
+  {
+    key: 'research_mutation_ratio',
+    label: 'Research : Mutation Ratio',
+    higherIsBetter: true,
+    format: 'ratio',
+    benchmark: [8.7, 2.8],
+  },
+  {
+    key: 'blind_edit_rate',
+    label: 'Blind Edit Rate',
+    higherIsBetter: false,
+    format: 'pct',
+    benchmark: [6.2, 33.7],
+  },
+  {
+    key: 'write_vs_edit_pct',
+    label: 'Write vs Edit %',
+    higherIsBetter: false,
+    format: 'pct',
+    benchmark: [4.9, 11.1],
+  },
   { key: 'first_tool_read_pct', label: 'First Tool = Read %', higherIsBetter: true, format: 'pct' },
-  { key: 'reasoning_loops_per_1k', label: 'Reasoning Loops / 1k calls', higherIsBetter: false, format: 'ratio', benchmark: [8.2, 26.6] },
-  { key: 'laziness_total', label: 'Laziness Violations / day', higherIsBetter: false, format: 'count', benchmark: [0, 10] },
-  { key: 'self_admitted_failures_per_1k', label: 'Self-Admitted Failures / 1k', higherIsBetter: false, format: 'ratio', benchmark: [0.1, 0.5] },
-  { key: 'user_interrupts_per_1k', label: 'User Interrupts / 1k', higherIsBetter: false, format: 'ratio', benchmark: [0.9, 11.4] },
-  { key: 'sentiment_ratio', label: 'Sentiment Ratio (+/-)', higherIsBetter: true, format: 'ratio', benchmark: [4.4, 3.0] },
-  { key: 'frustration_rate', label: 'Frustration Rate', higherIsBetter: false, format: 'pct', benchmark: [5.8, 9.8] },
-  { key: 'session_autonomy_median', label: 'Session Autonomy (min)', higherIsBetter: true, format: 'ratio' },
-  { key: 'prompts_per_session', label: 'Prompts / Session', higherIsBetter: true, format: 'ratio', benchmark: [35.9, 27.9] },
+  {
+    key: 'reasoning_loops_per_1k',
+    label: 'Reasoning Loops / 1k calls',
+    higherIsBetter: false,
+    format: 'ratio',
+    benchmark: [8.2, 26.6],
+  },
+  {
+    key: 'laziness_total',
+    label: 'Laziness Violations / day',
+    higherIsBetter: false,
+    format: 'count',
+    benchmark: [0, 10],
+  },
+  {
+    key: 'self_admitted_failures_per_1k',
+    label: 'Self-Admitted Failures / 1k',
+    higherIsBetter: false,
+    format: 'ratio',
+    benchmark: [0.1, 0.5],
+  },
+  {
+    key: 'user_interrupts_per_1k',
+    label: 'User Interrupts / 1k',
+    higherIsBetter: false,
+    format: 'ratio',
+    benchmark: [0.9, 11.4],
+  },
+  {
+    key: 'sentiment_ratio',
+    label: 'Sentiment Ratio (+/-)',
+    higherIsBetter: true,
+    format: 'ratio',
+    benchmark: [4.4, 3.0],
+  },
+  {
+    key: 'frustration_rate',
+    label: 'Frustration Rate',
+    higherIsBetter: false,
+    format: 'pct',
+    benchmark: [5.8, 9.8],
+  },
+  {
+    key: 'session_autonomy_median',
+    label: 'Session Autonomy (min)',
+    higherIsBetter: true,
+    format: 'ratio',
+  },
+  {
+    key: 'prompts_per_session',
+    label: 'Prompts / Session',
+    higherIsBetter: true,
+    format: 'ratio',
+    benchmark: [35.9, 27.9],
+  },
   { key: 'edit_churn_rate', label: 'Edit Churn Rate', higherIsBetter: false, format: 'pct' },
   { key: 'bash_success_rate', label: 'Bash Success Rate', higherIsBetter: true, format: 'pct' },
   { key: 'subagent_pct', label: 'Sub-agent Usage %', higherIsBetter: false, format: 'pct' },
@@ -51,9 +134,9 @@ function formatValue(value: number, format: MetricDef['format']): string {
     case 'count':
       return Math.round(value).toString();
     case 'pct':
-      return value.toFixed(1) + '%';
+      return `${value.toFixed(1)}%`;
     case 'currency':
-      return '$' + value.toFixed(2);
+      return `$${value.toFixed(2)}`;
     case 'depth':
       return Math.round(value).toString();
   }
@@ -94,16 +177,18 @@ function benchmarkLabel(metric: MetricDef): string {
   return `${formatValue(good, metric.format)} / ${formatValue(degraded, metric.format)}`;
 }
 
-function detectRegressions(db: VitalsDB): { status: string; alerts: Array<{ metric: string; severity: string; message: string }> } {
+function detectRegressions(db: VitalsDB): {
+  status: string;
+  alerts: Array<{ metric: string; severity: string; message: string }>;
+} {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { RegressionDetector } = require('../regression/detector');
     const detector = new RegressionDetector(db);
     const health = detector.getHealthStatus();
-    const status = health.status === 'green' ? 'healthy' : health.status === 'yellow' ? 'warning' : 'critical';
+    const status =
+      health.status === 'green' ? 'healthy' : health.status === 'yellow' ? 'warning' : 'critical';
     return {
       status,
-      alerts: (health.alerts || []).map((a: any) => ({
+      alerts: (health.alerts || []).map((a) => ({
         metric: a.metric,
         severity: a.severity,
         message: a.message,
@@ -115,7 +200,12 @@ function detectRegressions(db: VitalsDB): { status: string; alerts: Array<{ metr
 
   const alerts: Array<{ metric: string; severity: string; message: string }> = [];
 
-  const benchmarks: Array<{ key: string; good: number; degraded: number; higherIsBetter: boolean }> = [
+  const benchmarks: Array<{
+    key: string;
+    good: number;
+    degraded: number;
+    higherIsBetter: boolean;
+  }> = [
     { key: 'read_edit_ratio', good: 6.6, degraded: 2.0, higherIsBetter: true },
     { key: 'research_mutation_ratio', good: 8.7, degraded: 2.8, higherIsBetter: true },
     { key: 'blind_edit_rate', good: 6.2, degraded: 33.7, higherIsBetter: false },
@@ -133,7 +223,7 @@ function detectRegressions(db: VitalsDB): { status: string; alerts: Array<{ metr
   for (const b of benchmarks) {
     const rows = db.getDailyMetrics(b.key, 7);
     if (rows.length === 0) continue;
-    const avg = average(rows.map(r => r.value));
+    const avg = average(rows.map((r) => r.value));
 
     const pastDegraded = b.higherIsBetter ? avg < b.degraded : avg > b.degraded;
     const pastGood = b.higherIsBetter ? avg >= b.good : avg <= b.good;
@@ -153,8 +243,8 @@ function detectRegressions(db: VitalsDB): { status: string; alerts: Array<{ metr
     }
   }
 
-  const hasCritical = alerts.some(a => a.severity === 'critical');
-  const hasWarning = alerts.some(a => a.severity === 'warning');
+  const hasCritical = alerts.some((a) => a.severity === 'critical');
+  const hasWarning = alerts.some((a) => a.severity === 'warning');
   const status = hasCritical ? 'critical' : hasWarning ? 'warning' : 'healthy';
   return { status, alerts };
 }
@@ -171,7 +261,7 @@ export class MarkdownReport {
   }
 
   generate(options: { days?: number } = {}): string {
-    const days = options.days ?? 30;
+    const _days = options.days ?? 30;
     const lines: string[] = [];
 
     const dateRange = this.db.getDateRange();
@@ -182,7 +272,7 @@ export class MarkdownReport {
     const metricData: Record<string, { current7: number; previous7: number }> = {};
     for (const metric of ALL_METRICS) {
       const rows = this.db.getDailyMetrics(metric.key, 14);
-      const values = rows.map(r => r.value);
+      const values = rows.map((r) => r.value);
       const midpoint = Math.max(0, values.length - 7);
       const current7 = values.slice(midpoint);
       const previous7 = values.slice(Math.max(0, midpoint - 7), midpoint);
@@ -197,7 +287,7 @@ export class MarkdownReport {
     // --- Title ---
     lines.push('# Claude Code Quality Report');
     lines.push('');
-    if (dateRange && dateRange.min) {
+    if (dateRange?.min) {
       lines.push(`**Date range:** ${dateRange.min} to ${dateRange.max}`);
     }
     lines.push(`**Sessions scanned:** ${sessionCount} | **Tool calls:** ${toolCallCount}`);
@@ -206,19 +296,28 @@ export class MarkdownReport {
     // --- Executive Summary ---
     lines.push('## Executive Summary');
     lines.push('');
-    const statusEmoji = regressions.status === 'healthy' ? '\u2705' : regressions.status === 'warning' ? '\u26A0\uFE0F' : '\u274C';
+    const statusEmoji =
+      regressions.status === 'healthy'
+        ? '\u2705'
+        : regressions.status === 'warning'
+          ? '\u26A0\uFE0F'
+          : '\u274C';
     lines.push(`**Overall health:** ${statusEmoji} ${regressions.status.toUpperCase()}`);
     lines.push('');
 
     if (regressions.alerts.length > 0) {
       lines.push('**Key findings:**');
-      const criticals = regressions.alerts.filter(a => a.severity === 'critical');
-      const warnings = regressions.alerts.filter(a => a.severity === 'warning');
+      const criticals = regressions.alerts.filter((a) => a.severity === 'critical');
+      const warnings = regressions.alerts.filter((a) => a.severity === 'warning');
       if (criticals.length > 0) {
-        lines.push(`- ${criticals.length} critical regression${criticals.length !== 1 ? 's' : ''} detected`);
+        lines.push(
+          `- ${criticals.length} critical regression${criticals.length !== 1 ? 's' : ''} detected`,
+        );
       }
       if (warnings.length > 0) {
-        lines.push(`- ${warnings.length} warning${warnings.length !== 1 ? 's' : ''} requiring attention`);
+        lines.push(
+          `- ${warnings.length} warning${warnings.length !== 1 ? 's' : ''} requiring attention`,
+        );
       }
       lines.push('');
     } else {
@@ -229,8 +328,12 @@ export class MarkdownReport {
     // --- Key Metrics Table ---
     lines.push('## Key Metrics');
     lines.push('');
-    lines.push('| Metric | Current (7d avg) | Previous (7d avg) | Trend | Benchmark (Good / Degraded) | Status |');
-    lines.push('|--------|------------------:|-------------------:|:-----:|:---------------------------:|:------:|');
+    lines.push(
+      '| Metric | Current (7d avg) | Previous (7d avg) | Trend | Benchmark (Good / Degraded) | Status |',
+    );
+    lines.push(
+      '|--------|------------------:|-------------------:|:-----:|:---------------------------:|:------:|',
+    );
 
     for (const metric of ALL_METRICS) {
       const data = metricData[metric.key];
@@ -242,7 +345,9 @@ export class MarkdownReport {
       const bench = benchmarkLabel(metric);
       const status = benchmarkStatus(data.current7, metric);
 
-      lines.push(`| ${metric.label} | ${currentStr} | ${prevStr} | ${trend} | ${bench} | ${status} |`);
+      lines.push(
+        `| ${metric.label} | ${currentStr} | ${prevStr} | ${trend} | ${bench} | ${status} |`,
+      );
     }
     lines.push('');
 
@@ -285,7 +390,12 @@ export class MarkdownReport {
       lines.push('| Severity | Metric | Details |');
       lines.push('|:--------:|--------|---------|');
       for (const alert of regressions.alerts) {
-        const sevIcon = alert.severity === 'critical' ? '\u274C' : alert.severity === 'warning' ? '\u26A0\uFE0F' : '\u2139\uFE0F';
+        const sevIcon =
+          alert.severity === 'critical'
+            ? '\u274C'
+            : alert.severity === 'warning'
+              ? '\u26A0\uFE0F'
+              : '\u2139\uFE0F';
         lines.push(`| ${sevIcon} ${alert.severity} | ${alert.metric} | ${alert.message} |`);
       }
     }
@@ -302,150 +412,219 @@ export class MarkdownReport {
   // Section renderers
   // -------------------------------------------------------------------------
 
-  private appendBehaviorSection(lines: string[], data: Record<string, { current7: number; previous7: number }>): void {
-    const readEdit = data['read_edit_ratio'];
-    const researchMut = data['research_mutation_ratio'];
-    const blindEdit = data['blind_edit_rate'];
-    const writeVsEdit = data['write_vs_edit_pct'];
-    const firstTool = data['first_tool_read_pct'];
+  private appendBehaviorSection(
+    lines: string[],
+    data: Record<string, { current7: number; previous7: number }>,
+  ): void {
+    const readEdit = data.read_edit_ratio;
+    const researchMut = data.research_mutation_ratio;
+    const blindEdit = data.blind_edit_rate;
+    const writeVsEdit = data.write_vs_edit_pct;
+    const firstTool = data.first_tool_read_pct;
 
     lines.push('### Read:Edit Ratio');
     lines.push('');
     if (readEdit) {
-      lines.push(`Current 7-day average: **${readEdit.current7.toFixed(1)}** (benchmark: 6.6 good, 2.0 degraded)`);
+      lines.push(
+        `Current 7-day average: **${readEdit.current7.toFixed(1)}** (benchmark: 6.6 good, 2.0 degraded)`,
+      );
       lines.push('');
-      lines.push('A high read:edit ratio indicates thorough research before making changes. ' +
-        'Values above 6.0 suggest strong "read-first" discipline; values below 2.0 ' +
-        'indicate the model is editing without sufficient context.');
+      lines.push(
+        'A high read:edit ratio indicates thorough research before making changes. ' +
+          'Values above 6.0 suggest strong "read-first" discipline; values below 2.0 ' +
+          'indicate the model is editing without sufficient context.',
+      );
     }
     lines.push('');
 
     lines.push('### Blind Edit Rate');
     lines.push('');
     if (blindEdit) {
-      lines.push(`Current 7-day average: **${blindEdit.current7.toFixed(1)}%** (benchmark: 6.2% good, 33.7% degraded)`);
+      lines.push(
+        `Current 7-day average: **${blindEdit.current7.toFixed(1)}%** (benchmark: 6.2% good, 33.7% degraded)`,
+      );
       lines.push('');
-      lines.push('Measures the percentage of edits where the target file was not read ' +
-        'in the preceding 10 tool calls. High blind edit rates correlate with ' +
-        'increased churn and user frustration.');
+      lines.push(
+        'Measures the percentage of edits where the target file was not read ' +
+          'in the preceding 10 tool calls. High blind edit rates correlate with ' +
+          'increased churn and user frustration.',
+      );
     }
     lines.push('');
 
     lines.push('### First-Tool Patterns');
     lines.push('');
     if (firstTool) {
-      lines.push(`Percentage of prompts where the first tool used is Read: **${firstTool.current7.toFixed(1)}%**`);
+      lines.push(
+        `Percentage of prompts where the first tool used is Read: **${firstTool.current7.toFixed(1)}%**`,
+      );
       lines.push('');
-      lines.push('Starting with a read operation after receiving a user prompt is a strong ' +
-        'quality signal -- it indicates the model seeks context before acting.');
+      lines.push(
+        'Starting with a read operation after receiving a user prompt is a strong ' +
+          'quality signal -- it indicates the model seeks context before acting.',
+      );
     }
     lines.push('');
 
     if (researchMut) {
-      lines.push(`Research:Mutation ratio: **${researchMut.current7.toFixed(1)}** (benchmark: 8.7 good, 2.8 degraded)`);
+      lines.push(
+        `Research:Mutation ratio: **${researchMut.current7.toFixed(1)}** (benchmark: 8.7 good, 2.8 degraded)`,
+      );
       lines.push('');
     }
     if (writeVsEdit) {
-      lines.push(`Write vs Edit %: **${writeVsEdit.current7.toFixed(1)}%** (benchmark: 4.9% good, 11.1% degraded)`);
+      lines.push(
+        `Write vs Edit %: **${writeVsEdit.current7.toFixed(1)}%** (benchmark: 4.9% good, 11.1% degraded)`,
+      );
       lines.push('');
-      lines.push('A lower write-vs-edit percentage means the model prefers surgical edits ' +
-        'over full-file rewrites, which is generally safer and produces less churn.');
+      lines.push(
+        'A lower write-vs-edit percentage means the model prefers surgical edits ' +
+          'over full-file rewrites, which is generally safer and produces less churn.',
+      );
     }
     lines.push('');
   }
 
-  private appendThinkingSection(lines: string[], data: Record<string, { current7: number; previous7: number }>): void {
-    const depth = data['thinking_depth_median'];
-    const redacted = data['thinking_depth_redacted_pct'];
+  private appendThinkingSection(
+    lines: string[],
+    data: Record<string, { current7: number; previous7: number }>,
+  ): void {
+    const depth = data.thinking_depth_median;
+    const redacted = data.thinking_depth_redacted_pct;
 
     if (depth) {
-      lines.push(`Median thinking depth: **${Math.round(depth.current7)}** characters (benchmark: 2200 good, 600 degraded)`);
+      lines.push(
+        `Median thinking depth: **${Math.round(depth.current7)}** characters (benchmark: 2200 good, 600 degraded)`,
+      );
       lines.push('');
-      lines.push('Thinking depth measures the amount of internal reasoning the model performs ' +
-        'before responding. Deeper thinking generally correlates with higher-quality ' +
-        'outputs and fewer errors.');
+      lines.push(
+        'Thinking depth measures the amount of internal reasoning the model performs ' +
+          'before responding. Deeper thinking generally correlates with higher-quality ' +
+          'outputs and fewer errors.',
+      );
     }
     lines.push('');
 
     if (redacted) {
-      lines.push(`Redacted thinking blocks: **${redacted.current7.toFixed(1)}%** of all thinking blocks`);
+      lines.push(
+        `Redacted thinking blocks: **${redacted.current7.toFixed(1)}%** of all thinking blocks`,
+      );
       lines.push('');
-      lines.push('Redacted thinking blocks have their content stripped but retain a signature. ' +
-        'A high redaction rate may indicate the model is engaging in internal reasoning ' +
-        'that cannot be inspected.');
+      lines.push(
+        'Redacted thinking blocks have their content stripped but retain a signature. ' +
+          'A high redaction rate may indicate the model is engaging in internal reasoning ' +
+          'that cannot be inspected.',
+      );
     }
     lines.push('');
   }
 
-  private appendQualitySection(lines: string[], data: Record<string, { current7: number; previous7: number }>): void {
-    const loops = data['reasoning_loops_per_1k'];
-    const laziness = data['laziness_total'];
-    const failures = data['self_admitted_failures_per_1k'];
-    const interrupts = data['user_interrupts_per_1k'];
+  private appendQualitySection(
+    lines: string[],
+    data: Record<string, { current7: number; previous7: number }>,
+  ): void {
+    const loops = data.reasoning_loops_per_1k;
+    const laziness = data.laziness_total;
+    const failures = data.self_admitted_failures_per_1k;
+    const interrupts = data.user_interrupts_per_1k;
+    const lazinessMetric = ALL_METRICS.find((m) => m.key === 'laziness_total');
+    const loopsMetric = ALL_METRICS.find((m) => m.key === 'reasoning_loops_per_1k');
+    const failuresMetric = ALL_METRICS.find((m) => m.key === 'self_admitted_failures_per_1k');
+    const interruptsMetric = ALL_METRICS.find((m) => m.key === 'user_interrupts_per_1k');
 
     lines.push('| Signal | Value | Benchmark | Assessment |');
     lines.push('|--------|------:|:---------:|:----------:|');
 
-    if (laziness) {
-      lines.push(`| Laziness Violations / day | ${Math.round(laziness.current7)} | 0 good / 10 degraded | ${benchmarkStatus(laziness.current7, ALL_METRICS.find(m => m.key === 'laziness_total')!)} |`);
+    if (laziness && lazinessMetric) {
+      lines.push(
+        `| Laziness Violations / day | ${Math.round(laziness.current7)} | 0 good / 10 degraded | ${benchmarkStatus(laziness.current7, lazinessMetric)} |`,
+      );
     }
-    if (loops) {
-      lines.push(`| Reasoning Loops / 1k | ${loops.current7.toFixed(1)} | 8.2 good / 26.6 degraded | ${benchmarkStatus(loops.current7, ALL_METRICS.find(m => m.key === 'reasoning_loops_per_1k')!)} |`);
+    if (loops && loopsMetric) {
+      lines.push(
+        `| Reasoning Loops / 1k | ${loops.current7.toFixed(1)} | 8.2 good / 26.6 degraded | ${benchmarkStatus(loops.current7, loopsMetric)} |`,
+      );
     }
-    if (failures) {
-      lines.push(`| Self-Admitted Failures / 1k | ${failures.current7.toFixed(1)} | 0.1 good / 0.5 degraded | ${benchmarkStatus(failures.current7, ALL_METRICS.find(m => m.key === 'self_admitted_failures_per_1k')!)} |`);
+    if (failures && failuresMetric) {
+      lines.push(
+        `| Self-Admitted Failures / 1k | ${failures.current7.toFixed(1)} | 0.1 good / 0.5 degraded | ${benchmarkStatus(failures.current7, failuresMetric)} |`,
+      );
     }
-    if (interrupts) {
-      lines.push(`| User Interrupts / 1k | ${interrupts.current7.toFixed(1)} | 0.9 good / 11.4 degraded | ${benchmarkStatus(interrupts.current7, ALL_METRICS.find(m => m.key === 'user_interrupts_per_1k')!)} |`);
+    if (interrupts && interruptsMetric) {
+      lines.push(
+        `| User Interrupts / 1k | ${interrupts.current7.toFixed(1)} | 0.9 good / 11.4 degraded | ${benchmarkStatus(interrupts.current7, interruptsMetric)} |`,
+      );
     }
     lines.push('');
 
-    lines.push('**Laziness violations** include ownership dodging, permission seeking, premature stopping, ' +
-      'known-limitation excuses, and session-length complaints. Zero is the target.');
+    lines.push(
+      '**Laziness violations** include ownership dodging, permission seeking, premature stopping, ' +
+        'known-limitation excuses, and session-length complaints. Zero is the target.',
+    );
     lines.push('');
 
-    lines.push('**Reasoning loops** ("oh wait", "actually", "let me reconsider") indicate the model ' +
-      'is self-correcting mid-stream. Some amount is healthy, but high rates suggest ' +
-      'the model is struggling with the task.');
+    lines.push(
+      '**Reasoning loops** ("oh wait", "actually", "let me reconsider") indicate the model ' +
+        'is self-correcting mid-stream. Some amount is healthy, but high rates suggest ' +
+        'the model is struggling with the task.',
+    );
     lines.push('');
   }
 
-  private appendUserExperienceSection(lines: string[], data: Record<string, { current7: number; previous7: number }>): void {
-    const sentiment = data['sentiment_ratio'];
-    const frustration = data['frustration_rate'];
-    const autonomy = data['session_autonomy_median'];
-    const prompts = data['prompts_per_session'];
+  private appendUserExperienceSection(
+    lines: string[],
+    data: Record<string, { current7: number; previous7: number }>,
+  ): void {
+    const sentiment = data.sentiment_ratio;
+    const frustration = data.frustration_rate;
+    const autonomy = data.session_autonomy_median;
+    const prompts = data.prompts_per_session;
 
     if (sentiment) {
-      lines.push(`**Sentiment ratio:** ${sentiment.current7.toFixed(1)} (positive/negative words; benchmark: 4.4 good, 3.0 degraded)`);
+      lines.push(
+        `**Sentiment ratio:** ${sentiment.current7.toFixed(1)} (positive/negative words; benchmark: 4.4 good, 3.0 degraded)`,
+      );
       lines.push('');
     }
     if (frustration) {
-      lines.push(`**Frustration rate:** ${frustration.current7.toFixed(1)}% of prompts contain frustration signals (benchmark: 5.8% good, 9.8% degraded)`);
+      lines.push(
+        `**Frustration rate:** ${frustration.current7.toFixed(1)}% of prompts contain frustration signals (benchmark: 5.8% good, 9.8% degraded)`,
+      );
       lines.push('');
     }
     if (autonomy) {
-      lines.push(`**Session autonomy (median):** ${autonomy.current7.toFixed(1)} minutes between user prompts`);
+      lines.push(
+        `**Session autonomy (median):** ${autonomy.current7.toFixed(1)} minutes between user prompts`,
+      );
       lines.push('');
-      lines.push('Higher autonomy means the model works longer stretches independently, ' +
-        'requiring less hand-holding from the user.');
+      lines.push(
+        'Higher autonomy means the model works longer stretches independently, ' +
+          'requiring less hand-holding from the user.',
+      );
     }
     lines.push('');
     if (prompts) {
-      lines.push(`**Prompts per session:** ${prompts.current7.toFixed(1)} (benchmark: 35.9 good, 27.9 degraded)`);
+      lines.push(
+        `**Prompts per session:** ${prompts.current7.toFixed(1)} (benchmark: 35.9 good, 27.9 degraded)`,
+      );
       lines.push('');
-      lines.push('More prompts per session indicates longer, more productive sessions ' +
-        'rather than short sessions where the user gives up.');
+      lines.push(
+        'More prompts per session indicates longer, more productive sessions ' +
+          'rather than short sessions where the user gives up.',
+      );
     }
     lines.push('');
   }
 
-  private appendEfficiencySection(lines: string[], data: Record<string, { current7: number; previous7: number }>): void {
-    const churn = data['edit_churn_rate'];
-    const bash = data['bash_success_rate'];
-    const subagent = data['subagent_pct'];
-    const cost = data['cost_estimate'];
-    const pressure = data['context_pressure'];
+  private appendEfficiencySection(
+    lines: string[],
+    data: Record<string, { current7: number; previous7: number }>,
+  ): void {
+    const churn = data.edit_churn_rate;
+    const bash = data.bash_success_rate;
+    const subagent = data.subagent_pct;
+    const cost = data.cost_estimate;
+    const pressure = data.context_pressure;
 
     lines.push('| Metric | Value |');
     lines.push('|--------|------:|');
@@ -467,11 +646,15 @@ export class MarkdownReport {
     }
     lines.push('');
 
-    lines.push('**Edit churn rate** measures repeated edits to the same file without intervening reads -- ' +
-      'a sign the model is thrashing rather than making targeted corrections.');
+    lines.push(
+      '**Edit churn rate** measures repeated edits to the same file without intervening reads -- ' +
+        'a sign the model is thrashing rather than making targeted corrections.',
+    );
     lines.push('');
-    lines.push('**Context pressure** compares quality in the first quartile of context usage vs the last. ' +
-      'Positive values indicate degradation as the context window fills up.');
+    lines.push(
+      '**Context pressure** compares quality in the first quartile of context usage vs the last. ' +
+        'Positive values indicate degradation as the context window fills up.',
+    );
     lines.push('');
   }
 
@@ -496,11 +679,14 @@ export class MarkdownReport {
         lines.push('| Metric | Before | After | Change | Verdict |');
         lines.push('|--------|-------:|------:|-------:|:-------:|');
         for (const impact of impacts) {
-          const verdictIcon = impact.verdict === 'improved' ? '\u2705'
-            : impact.verdict === 'degraded' ? '\u274C'
-              : '\u2796';
+          const verdictIcon =
+            impact.verdict === 'improved'
+              ? '\u2705'
+              : impact.verdict === 'degraded'
+                ? '\u274C'
+                : '\u2796';
           lines.push(
-            `| ${impact.metric_name} | ${impact.before_value.toFixed(1)} | ${impact.after_value.toFixed(1)} | ${impact.change_pct >= 0 ? '+' : ''}${impact.change_pct.toFixed(1)}% | ${verdictIcon} ${impact.verdict} |`
+            `| ${impact.metric_name} | ${impact.before_value.toFixed(1)} | ${impact.after_value.toFixed(1)} | ${impact.change_pct >= 0 ? '+' : ''}${impact.change_pct.toFixed(1)}% | ${verdictIcon} ${impact.verdict} |`,
           );
         }
         lines.push('');

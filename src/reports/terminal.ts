@@ -1,5 +1,6 @@
-import { VitalsDB } from '../db/database';
 import chalk from 'chalk';
+import type { VitalsDB } from '../db/database';
+import { RegressionDetector } from '../regression/detector';
 
 // ---------------------------------------------------------------------------
 // Types & constants
@@ -18,36 +19,123 @@ const METRIC_SECTIONS: Array<{ title: string; metrics: MetricDef[] }> = [
   {
     title: 'THINKING',
     metrics: [
-      { key: 'thinking_depth_median', label: 'Thinking Depth (median)', higherIsBetter: true, format: 'depth', benchmark: [2200, 600] },
-      { key: 'thinking_depth_redacted_pct', label: 'Redacted Thinking %', higherIsBetter: false, format: 'pct' },
+      {
+        key: 'thinking_depth_median',
+        label: 'Thinking Depth (median)',
+        higherIsBetter: true,
+        format: 'depth',
+        benchmark: [2200, 600],
+      },
+      {
+        key: 'thinking_depth_redacted_pct',
+        label: 'Redacted Thinking %',
+        higherIsBetter: false,
+        format: 'pct',
+      },
     ],
   },
   {
     title: 'BEHAVIOR',
     metrics: [
-      { key: 'read_edit_ratio', label: 'Read : Edit Ratio', higherIsBetter: true, format: 'ratio', benchmark: [6.6, 2.0] },
-      { key: 'research_mutation_ratio', label: 'Research : Mutation Ratio', higherIsBetter: true, format: 'ratio', benchmark: [8.7, 2.8] },
-      { key: 'blind_edit_rate', label: 'Blind Edit Rate', higherIsBetter: false, format: 'pct', benchmark: [6.2, 33.7] },
-      { key: 'write_vs_edit_pct', label: 'Write vs Edit %', higherIsBetter: false, format: 'pct', benchmark: [4.9, 11.1] },
-      { key: 'first_tool_read_pct', label: 'First Tool = Read %', higherIsBetter: true, format: 'pct' },
+      {
+        key: 'read_edit_ratio',
+        label: 'Read : Edit Ratio',
+        higherIsBetter: true,
+        format: 'ratio',
+        benchmark: [6.6, 2.0],
+      },
+      {
+        key: 'research_mutation_ratio',
+        label: 'Research : Mutation Ratio',
+        higherIsBetter: true,
+        format: 'ratio',
+        benchmark: [8.7, 2.8],
+      },
+      {
+        key: 'blind_edit_rate',
+        label: 'Blind Edit Rate',
+        higherIsBetter: false,
+        format: 'pct',
+        benchmark: [6.2, 33.7],
+      },
+      {
+        key: 'write_vs_edit_pct',
+        label: 'Write vs Edit %',
+        higherIsBetter: false,
+        format: 'pct',
+        benchmark: [4.9, 11.1],
+      },
+      {
+        key: 'first_tool_read_pct',
+        label: 'First Tool = Read %',
+        higherIsBetter: true,
+        format: 'pct',
+      },
     ],
   },
   {
     title: 'QUALITY SIGNALS',
     metrics: [
-      { key: 'reasoning_loops_per_1k', label: 'Reasoning Loops / 1k calls', higherIsBetter: false, format: 'ratio', benchmark: [8.2, 26.6] },
-      { key: 'laziness_total', label: 'Laziness Violations', higherIsBetter: false, format: 'count', benchmark: [0, 10] },
-      { key: 'self_admitted_failures_per_1k', label: 'Self-Admitted Failures / 1k', higherIsBetter: false, format: 'ratio', benchmark: [0.1, 0.5] },
-      { key: 'user_interrupts_per_1k', label: 'User Interrupts / 1k', higherIsBetter: false, format: 'ratio', benchmark: [0.9, 11.4] },
+      {
+        key: 'reasoning_loops_per_1k',
+        label: 'Reasoning Loops / 1k calls',
+        higherIsBetter: false,
+        format: 'ratio',
+        benchmark: [8.2, 26.6],
+      },
+      {
+        key: 'laziness_total',
+        label: 'Laziness Violations',
+        higherIsBetter: false,
+        format: 'count',
+        benchmark: [0, 10],
+      },
+      {
+        key: 'self_admitted_failures_per_1k',
+        label: 'Self-Admitted Failures / 1k',
+        higherIsBetter: false,
+        format: 'ratio',
+        benchmark: [0.1, 0.5],
+      },
+      {
+        key: 'user_interrupts_per_1k',
+        label: 'User Interrupts / 1k',
+        higherIsBetter: false,
+        format: 'ratio',
+        benchmark: [0.9, 11.4],
+      },
     ],
   },
   {
     title: 'USER EXPERIENCE',
     metrics: [
-      { key: 'sentiment_ratio', label: 'Sentiment Ratio (+/-)', higherIsBetter: true, format: 'ratio', benchmark: [4.4, 3.0] },
-      { key: 'frustration_rate', label: 'Frustration Rate', higherIsBetter: false, format: 'pct', benchmark: [5.8, 9.8] },
-      { key: 'session_autonomy_median', label: 'Session Autonomy (min)', higherIsBetter: true, format: 'ratio' },
-      { key: 'prompts_per_session', label: 'Prompts / Session', higherIsBetter: true, format: 'ratio', benchmark: [35.9, 27.9] },
+      {
+        key: 'sentiment_ratio',
+        label: 'Sentiment Ratio (+/-)',
+        higherIsBetter: true,
+        format: 'ratio',
+        benchmark: [4.4, 3.0],
+      },
+      {
+        key: 'frustration_rate',
+        label: 'Frustration Rate',
+        higherIsBetter: false,
+        format: 'pct',
+        benchmark: [5.8, 9.8],
+      },
+      {
+        key: 'session_autonomy_median',
+        label: 'Session Autonomy (min)',
+        higherIsBetter: true,
+        format: 'ratio',
+      },
+      {
+        key: 'prompts_per_session',
+        label: 'Prompts / Session',
+        higherIsBetter: true,
+        format: 'ratio',
+        benchmark: [35.9, 27.9],
+      },
     ],
   },
   {
@@ -56,19 +144,29 @@ const METRIC_SECTIONS: Array<{ title: string; metrics: MetricDef[] }> = [
       { key: 'edit_churn_rate', label: 'Edit Churn Rate', higherIsBetter: false, format: 'pct' },
       { key: 'bash_success_rate', label: 'Bash Success Rate', higherIsBetter: true, format: 'pct' },
       { key: 'subagent_pct', label: 'Sub-agent Usage %', higherIsBetter: false, format: 'pct' },
-      { key: 'cost_estimate', label: 'Daily Cost Estimate', higherIsBetter: false, format: 'currency' },
+      {
+        key: 'cost_estimate',
+        label: 'Daily Cost Estimate',
+        higherIsBetter: false,
+        format: 'currency',
+      },
     ],
   },
   {
     title: 'CONTEXT',
     metrics: [
-      { key: 'context_pressure', label: 'Context Pressure', higherIsBetter: false, format: 'ratio' },
+      {
+        key: 'context_pressure',
+        label: 'Context Pressure',
+        higherIsBetter: false,
+        format: 'ratio',
+      },
     ],
   },
 ];
 
 /** All metric keys in a flat list, preserving section order. */
-const ALL_METRIC_KEYS = METRIC_SECTIONS.flatMap(s => s.metrics.map(m => m.key));
+const ALL_METRIC_KEYS = METRIC_SECTIONS.flatMap((s) => s.metrics.map((m) => m.key));
 
 // Sparkline characters, ordered lowest to highest.
 const SPARK_CHARS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
@@ -83,7 +181,7 @@ function sparkline(values: number[]): string {
   const max = Math.max(...values);
   const range = max - min;
   return values
-    .map(v => {
+    .map((v) => {
       if (range === 0) return SPARK_CHARS[3]; // midpoint when all values equal
       const idx = Math.round(((v - min) / range) * (SPARK_CHARS.length - 1));
       return SPARK_CHARS[Math.min(idx, SPARK_CHARS.length - 1)];
@@ -103,9 +201,9 @@ function formatValue(value: number, format: MetricDef['format']): string {
     case 'count':
       return Math.round(value).toString();
     case 'pct':
-      return value.toFixed(1) + '%';
+      return `${value.toFixed(1)}%`;
     case 'currency':
-      return '$' + value.toFixed(2);
+      return `$${value.toFixed(2)}`;
     case 'depth':
       return Math.round(value).toString();
   }
@@ -127,15 +225,18 @@ function trendArrow(current: number, previous: number, higherIsBetter: boolean):
   }
 }
 
+// ANSI escape codes begin with the 0x1B control character; stripping them is intentional here.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape sequence stripping
+const ANSI_ESCAPE = /\x1B\[[0-9;]*m/g;
+
 function padRight(str: string, len: number): string {
-  // Account for ANSI escape codes: strip them for length calculation
-  const visible = str.replace(/\x1B\[[0-9;]*m/g, '');
+  const visible = str.replace(ANSI_ESCAPE, '');
   const pad = Math.max(0, len - visible.length);
   return str + ' '.repeat(pad);
 }
 
 function padLeft(str: string, len: number): string {
-  const visible = str.replace(/\x1B\[[0-9;]*m/g, '');
+  const visible = str.replace(ANSI_ESCAPE, '');
   const pad = Math.max(0, len - visible.length);
   return ' '.repeat(pad) + str;
 }
@@ -159,18 +260,18 @@ interface RegressionAlert {
   threshold: number;
 }
 
-function detectRegressions(db: VitalsDB): { status: 'healthy' | 'warning' | 'critical'; alerts: RegressionAlert[] } {
-  // Try dynamic import of the real detector first
+function detectRegressions(db: VitalsDB): {
+  status: 'healthy' | 'warning' | 'critical';
+  alerts: RegressionAlert[];
+} {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { RegressionDetector } = require('../regression/detector');
     const detector = new RegressionDetector(db);
     const health = detector.getHealthStatus();
     const status: 'healthy' | 'warning' | 'critical' =
       health.status === 'green' ? 'healthy' : health.status === 'yellow' ? 'warning' : 'critical';
     return {
       status,
-      alerts: (health.alerts || []).map((a: any) => ({
+      alerts: (health.alerts || []).map((a) => ({
         metric: a.metric,
         severity: a.severity,
         message: a.message,
@@ -184,7 +285,12 @@ function detectRegressions(db: VitalsDB): { status: 'healthy' | 'warning' | 'cri
 
   const alerts: RegressionAlert[] = [];
 
-  const benchmarks: Array<{ key: string; good: number; degraded: number; higherIsBetter: boolean }> = [
+  const benchmarks: Array<{
+    key: string;
+    good: number;
+    degraded: number;
+    higherIsBetter: boolean;
+  }> = [
     { key: 'read_edit_ratio', good: 6.6, degraded: 2.0, higherIsBetter: true },
     { key: 'research_mutation_ratio', good: 8.7, degraded: 2.8, higherIsBetter: true },
     { key: 'blind_edit_rate', good: 6.2, degraded: 33.7, higherIsBetter: false },
@@ -202,7 +308,7 @@ function detectRegressions(db: VitalsDB): { status: 'healthy' | 'warning' | 'cri
   for (const b of benchmarks) {
     const rows = db.getDailyMetrics(b.key, 7);
     if (rows.length === 0) continue;
-    const avg = average(rows.map(r => r.value));
+    const avg = average(rows.map((r) => r.value));
 
     const pastDegraded = b.higherIsBetter ? avg < b.degraded : avg > b.degraded;
     const pastGood = b.higherIsBetter ? avg >= b.good : avg <= b.good;
@@ -226,9 +332,13 @@ function detectRegressions(db: VitalsDB): { status: 'healthy' | 'warning' | 'cri
     }
   }
 
-  const hasCritical = alerts.some(a => a.severity === 'critical');
-  const hasWarning = alerts.some(a => a.severity === 'warning');
-  const status: 'healthy' | 'warning' | 'critical' = hasCritical ? 'critical' : hasWarning ? 'warning' : 'healthy';
+  const hasCritical = alerts.some((a) => a.severity === 'critical');
+  const hasWarning = alerts.some((a) => a.severity === 'warning');
+  const status: 'healthy' | 'warning' | 'critical' = hasCritical
+    ? 'critical'
+    : hasWarning
+      ? 'warning'
+      : 'healthy';
   return { status, alerts };
 }
 
@@ -244,7 +354,7 @@ export class TerminalReport {
   }
 
   generate(options: { days?: number; model?: string; project?: string } = {}): void {
-    const days = options.days ?? 30;
+    const _days = options.days ?? 30;
 
     // Gather aggregate data for the header
     const dateRange = this.db.getDateRange();
@@ -252,11 +362,12 @@ export class TerminalReport {
     const toolCallCount = this.db.getToolCallCount();
 
     // Collect per-metric data: last 14 days for sparklines, split 7+7 for trend
-    const metricData: Record<string, { values14: number[]; current7: number; previous7: number }> = {};
+    const metricData: Record<string, { values14: number[]; current7: number; previous7: number }> =
+      {};
 
     for (const key of ALL_METRIC_KEYS) {
       const rows = this.db.getDailyMetrics(key, 14, options.model, options.project);
-      const values = rows.map(r => r.value);
+      const values = rows.map((r) => r.value);
 
       // Split into previous 7 and current 7
       const midpoint = Math.max(0, values.length - 7);
@@ -277,12 +388,20 @@ export class TerminalReport {
 
     // Header
     console.log('');
-    console.log(chalk.bold.cyan('  ╔══════════════════════════════════════════════════════════════════╗'));
-    console.log(chalk.bold.cyan('  ║') + chalk.bold.white('           CLAUDE VITALS REPORT                                ') + chalk.bold.cyan('║'));
-    console.log(chalk.bold.cyan('  ╚══════════════════════════════════════════════════════════════════╝'));
+    console.log(
+      chalk.bold.cyan('  ╔══════════════════════════════════════════════════════════════════╗'),
+    );
+    console.log(
+      chalk.bold.cyan('  ║') +
+        chalk.bold.white('           CLAUDE VITALS REPORT                                ') +
+        chalk.bold.cyan('║'),
+    );
+    console.log(
+      chalk.bold.cyan('  ╚══════════════════════════════════════════════════════════════════╝'),
+    );
     console.log('');
 
-    if (dateRange && dateRange.min) {
+    if (dateRange?.min) {
       console.log(chalk.gray(`  Date range: ${dateRange.min} to ${dateRange.max}`));
     }
     console.log(chalk.gray(`  Sessions scanned: ${sessionCount}    Tool calls: ${toolCallCount}`));
@@ -290,10 +409,14 @@ export class TerminalReport {
 
     // Health status
     const statusLabel =
-      regressions.status === 'healthy' ? chalk.bgGreen.black(' HEALTHY ')
-        : regressions.status === 'warning' ? chalk.bgYellow.black(' WARNING ')
+      regressions.status === 'healthy'
+        ? chalk.bgGreen.black(' HEALTHY ')
+        : regressions.status === 'warning'
+          ? chalk.bgYellow.black(' WARNING ')
           : chalk.bgRed.white(' CRITICAL ');
-    console.log('  Health: ' + statusLabel + chalk.gray(` (${regressions.alerts.length} alert${regressions.alerts.length !== 1 ? 's' : ''})`));
+    console.log(
+      `  Health: ${statusLabel}${chalk.gray(` (${regressions.alerts.length} alert${regressions.alerts.length !== 1 ? 's' : ''})`)}`,
+    );
     console.log('');
 
     // Key Metrics Table
@@ -303,25 +426,30 @@ export class TerminalReport {
     const COL_TREND = 4;
     const COL_SPARK = 16;
 
-    const headerLine =
-      chalk.gray('  ' +
+    const headerLine = chalk.gray(
+      '  ' +
         padRight('Metric', COL_NAME) +
         padLeft('Current', COL_CURRENT) +
         padLeft('Previous', COL_PREV) +
         padLeft('', COL_TREND) +
-        '  Trend');
+        '  Trend',
+    );
     console.log(headerLine);
-    console.log(chalk.gray('  ' + '\u2500'.repeat(COL_NAME + COL_CURRENT + COL_PREV + COL_TREND + COL_SPARK + 2)));
+    console.log(
+      chalk.gray(
+        `  ${'\u2500'.repeat(COL_NAME + COL_CURRENT + COL_PREV + COL_TREND + COL_SPARK + 2)}`,
+      ),
+    );
 
     for (const section of METRIC_SECTIONS) {
       console.log('');
-      console.log(chalk.bold.white('  ' + section.title));
+      console.log(chalk.bold.white(`  ${section.title}`));
 
       for (const metric of section.metrics) {
         const data = metricData[metric.key];
         if (!data) continue;
 
-        const nameStr = padRight('  ' + metric.label, COL_NAME + 2);
+        const nameStr = padRight(`  ${metric.label}`, COL_NAME + 2);
         const currentStr = padLeft(formatValue(data.current7, metric.format), COL_CURRENT);
         const prevStr = padLeft(formatValue(data.previous7, metric.format), COL_PREV);
         const arrow = trendArrow(data.current7, data.previous7, metric.higherIsBetter);
@@ -329,16 +457,22 @@ export class TerminalReport {
 
         console.log(
           chalk.white(nameStr) +
-          chalk.bold.white(currentStr) +
-          chalk.gray(prevStr) +
-          '  ' + arrow +
-          '  ' + chalk.cyan(spark)
+            chalk.bold.white(currentStr) +
+            chalk.gray(prevStr) +
+            '  ' +
+            arrow +
+            '  ' +
+            chalk.cyan(spark),
         );
       }
     }
 
     console.log('');
-    console.log(chalk.gray('  ' + '\u2500'.repeat(COL_NAME + COL_CURRENT + COL_PREV + COL_TREND + COL_SPARK + 2)));
+    console.log(
+      chalk.gray(
+        `  ${'\u2500'.repeat(COL_NAME + COL_CURRENT + COL_PREV + COL_TREND + COL_SPARK + 2)}`,
+      ),
+    );
 
     // Regression Alerts
     if (regressions.alerts.length > 0) {
@@ -347,13 +481,19 @@ export class TerminalReport {
       console.log('');
 
       for (const alert of regressions.alerts) {
-        const icon = alert.severity === 'critical' ? chalk.red('\u2718')
-          : alert.severity === 'warning' ? chalk.yellow('\u26A0')
-            : chalk.blue('\u2139');
-        const sevColor = alert.severity === 'critical' ? chalk.red
-          : alert.severity === 'warning' ? chalk.yellow
-            : chalk.blue;
-        console.log('  ' + icon + ' ' + sevColor(alert.message));
+        const icon =
+          alert.severity === 'critical'
+            ? chalk.red('\u2718')
+            : alert.severity === 'warning'
+              ? chalk.yellow('\u26A0')
+              : chalk.blue('\u2139');
+        const sevColor =
+          alert.severity === 'critical'
+            ? chalk.red
+            : alert.severity === 'warning'
+              ? chalk.yellow
+              : chalk.blue;
+        console.log(`  ${icon} ${sevColor(alert.message)}`);
       }
     }
 
@@ -369,24 +509,26 @@ export class TerminalReport {
         const typeColor = change.type === 'auto' ? chalk.cyan : chalk.magenta;
         console.log(
           '  ' +
-          chalk.gray(dateStr) +
-          '  ' +
-          typeColor('[' + change.type + ']') +
-          '  ' +
-          chalk.white(change.description)
+            chalk.gray(dateStr) +
+            '  ' +
+            typeColor(`[${change.type}]`) +
+            '  ' +
+            chalk.white(change.description),
         );
 
         // Show impact if available
         const impacts = this.db.getImpactResults(change.id);
         if (impacts.length > 0) {
-          const improved = impacts.filter(i => i.verdict === 'improved').length;
-          const degraded = impacts.filter(i => i.verdict === 'degraded').length;
-          const stable = impacts.filter(i => i.verdict === 'stable').length;
+          const improved = impacts.filter((i) => i.verdict === 'improved').length;
+          const degraded = impacts.filter((i) => i.verdict === 'degraded').length;
+          const stable = impacts.filter((i) => i.verdict === 'stable').length;
           console.log(
             chalk.gray('    Impact: ') +
-            chalk.green(`${improved} improved`) + chalk.gray(', ') +
-            chalk.red(`${degraded} degraded`) + chalk.gray(', ') +
-            chalk.gray(`${stable} stable`)
+              chalk.green(`${improved} improved`) +
+              chalk.gray(', ') +
+              chalk.red(`${degraded} degraded`) +
+              chalk.gray(', ') +
+              chalk.gray(`${stable} stable`),
           );
         }
       }
