@@ -13,7 +13,11 @@ CREATE TABLE IF NOT EXISTS sessions (
   total_messages INTEGER DEFAULT 0,
   total_user_prompts INTEGER DEFAULT 0,
   total_tool_calls INTEGER DEFAULT 0,
-  scanned_at TEXT NOT NULL
+  scanned_at TEXT NOT NULL,
+  source_path TEXT,
+  source_mtime_ms INTEGER,
+  source_size_bytes INTEGER,
+  provider TEXT NOT NULL DEFAULT 'claude'
 );
 
 -- Messages table
@@ -45,6 +49,7 @@ CREATE TABLE IF NOT EXISTS tool_calls (
   session_id TEXT NOT NULL,
   message_id INTEGER,
   message_uuid TEXT,
+  tool_call_id TEXT,
   tool_name TEXT NOT NULL,
   tool_input_json TEXT,        -- JSON string of input
   target_file TEXT,            -- extracted file path for Read/Edit/Write

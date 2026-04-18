@@ -1,9 +1,14 @@
-import { VitalsDB } from '../db/database';
-import { discoverSessionLogs, parseSessionLog, ParsedSessionLog, ParsedAssistantMessage, ParsedUserMessage } from './log-parser';
+import fs from 'node:fs';
 import chalk from 'chalk';
+import type { VitalsDB } from '../db/database';
+import { discoverSessionLogs, type ParsedSessionLog, parseSessionLog } from './log-parser';
 
 // Signature-to-content correlation factor from the original analysis (r=0.97)
 const SIGNATURE_TO_CONTENT_RATIO = 4.26;
+
+function getErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 export class Scanner {
   private db: VitalsDB;
@@ -12,9 +17,15 @@ export class Scanner {
     this.db = db;
   }
 
-  scan(options: { force?: boolean; verbose?: boolean } = {}): { scanned: number; skipped: number; errors: number } {
+  scan(options: { force?: boolean; verbose?: boolean } = {}): {
+    scanned: number;
+    skipped: number;
+    errors: number;
+  } {
     const logFiles = discoverSessionLogs();
-    let scanned = 0, skipped = 0, errors = 0;
+    let scanned = 0,
+      skipped = 0,
+      errors = 0;
 
     if (options.verbose) {
       console.log(chalk.gray(`Found ${logFiles.length} session log files`));
@@ -22,11 +33,34 @@ export class Scanner {
 
     for (const filePath of logFiles) {
       const sessionId = this.extractSessionId(filePath);
-      if (!sessionId) { errors++; continue; }
-
-      if (!options.force && this.db.isSessionScanned(sessionId)) {
-        skipped++;
+      if (!sessionId) {
+        errors++;
         continue;
+      }
+
+      let stat: fs.Stats;
+      try {
+        stat = fs.statSync(filePath);
+      } catch (err: unknown) {
+        if (options.verbose) {
+          console.log(chalk.red(`  Error stat ${filePath}: ${getErrorMessage(err)}`));
+        }
+        errors++;
+        continue;
+      }
+      const mtimeMs = Math.floor(stat.mtimeMs);
+      const sizeBytes = stat.size;
+
+      if (!options.force) {
+        const existing = this.db.getSessionSourceMeta(sessionId);
+        if (
+          existing &&
+          existing.source_mtime_ms === mtimeMs &&
+          existing.source_size_bytes === sizeBytes
+        ) {
+          skipped++;
+          continue;
+        }
       }
 
       try {
@@ -35,11 +69,11 @@ export class Scanner {
         }
 
         const parsed = parseSessionLog(filePath);
-        this.ingestParsedSession(parsed, filePath, sessionId);
+        this.ingestParsedSession(parsed, filePath, sessionId, mtimeMs, sizeBytes);
         scanned++;
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (options.verbose) {
-          console.log(chalk.red(`  Error scanning ${filePath}: ${err.message}`));
+          console.log(chalk.red(`  Error scanning ${filePath}: ${getErrorMessage(err)}`));
         }
         errors++;
       }
@@ -49,29 +83,42 @@ export class Scanner {
   }
 
   private extractSessionId(filePath: string): string | null {
-    const match = filePath.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i);
+    const match = filePath.match(
+      /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i,
+    );
     return match ? match[1] : null;
   }
 
-  private ingestParsedSession(parsed: ParsedSessionLog, filePath: string, fallbackSessionId: string) {
+  private ingestParsedSession(
+    parsed: ParsedSessionLog,
+    filePath: string,
+    fallbackSessionId: string,
+    sourceMtimeMs: number,
+    sourceSizeBytes: number,
+  ) {
     const projectPath = this.extractProjectPath(filePath);
     const projectName = this.extractProjectName(projectPath);
     const sessionId = parsed.metadata.sessionId || fallbackSessionId;
 
     // Collect human prompts from user messages
-    const humanPrompts = parsed.userMessages.filter(m => m.isHumanPrompt);
+    const humanPrompts = parsed.userMessages.filter((m) => m.isHumanPrompt);
 
     // Collect all tool results from user messages that have them
-    const allToolResults = parsed.userMessages.flatMap(m => m.toolResults.map(tr => ({
-      ...tr,
-      messageUuid: m.uuid,
-      timestamp: m.timestamp,
-    })));
+    const allToolResults = parsed.userMessages.flatMap((m) =>
+      m.toolResults.map((tr) => ({
+        ...tr,
+        messageUuid: m.uuid,
+        timestamp: m.timestamp,
+      })),
+    );
 
     // Build a global sequence counter for tool calls
     let seqNum = 0;
 
     const ingestAll = this.db.db.transaction(() => {
+      // Delete any prior rows for this session (idempotent reingest)
+      this.db.deleteSessionData(sessionId);
+
       // Insert session
       this.db.insertSession({
         id: sessionId,
@@ -86,6 +133,10 @@ export class Scanner {
         total_messages: parsed.totalMessages,
         total_user_prompts: humanPrompts.length,
         total_tool_calls: parsed.totalToolCalls,
+        source_path: filePath,
+        source_mtime_ms: sourceMtimeMs,
+        source_size_bytes: sourceSizeBytes,
+        provider: 'claude',
       });
 
       // Insert user prompts
@@ -149,6 +200,7 @@ export class Scanner {
             session_id: sessionId,
             message_id: msgId,
             message_uuid: am.uuid || undefined,
+            tool_call_id: tc.toolUseId || undefined,
             tool_name: tc.toolName,
             tool_input_json: JSON.stringify(tc.input),
             target_file: tc.targetFile || undefined,
@@ -213,37 +265,11 @@ export class Scanner {
         });
       }
 
-      // Update bash success from tool results
-      this.updateBashSuccess(sessionId);
+      // Update bash success from tool results via tool_call_id join
+      this.db.updateBashSuccessForSession(sessionId);
     });
 
     ingestAll();
-  }
-
-  private updateBashSuccess(sessionId: string) {
-    // Match tool results to bash tool calls and determine success/failure
-    const bashCalls = this.db.db.prepare(`
-      SELECT tc.id, tc.tool_name FROM tool_calls tc
-      WHERE tc.session_id = ? AND tc.category = 'bash'
-    `).all(sessionId) as Array<{ id: number; tool_name: string }>;
-
-    // Tool results with errors indicate failures
-    const errorResults = this.db.db.prepare(`
-      SELECT tool_use_id FROM tool_results
-      WHERE session_id = ? AND is_error = 1
-    `).all(sessionId) as Array<{ tool_use_id: string }>;
-    const errorIds = new Set(errorResults.map(r => r.tool_use_id));
-
-    // For bash calls, check if any corresponding tool result was an error
-    // Since we don't have a direct tool_use_id link in tool_calls,
-    // mark all bash calls as success=1 by default, update based on
-    // overall error rate heuristic. A more precise approach would need the tool_use_id.
-    const updateStmt = this.db.db.prepare(`
-      UPDATE tool_calls SET bash_success = 1 WHERE id = ? AND category = 'bash'
-    `);
-    for (const bc of bashCalls) {
-      updateStmt.run(bc.id);
-    }
   }
 
   private extractProjectPath(filePath: string): string {
