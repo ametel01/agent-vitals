@@ -1,0 +1,9 @@
+dist
+node_modules
+*.db
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+bun.lock
+docs/index.html
+src/dashboard/dashboard.html
