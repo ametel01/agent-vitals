@@ -18,13 +18,18 @@ CLI tool that monitors Claude Code quality by analyzing session logs. Based on [
 ## Commands
 
 ```bash
-npm run build              # tsc -> dist/
+bun install                # Install dependencies (Bun is the package manager)
+bun run build              # tsc -> dist/
+bun run check              # typecheck + biome lint + prettier format:check
+bun run format             # prettier --write .
 node dist/index.js scan    # Ingest session logs
 node dist/index.js health  # One-line status
 node dist/index.js report  # Terminal report
 node dist/index.js report --format md  # Markdown report
 node dist/index.js dashboard           # Web dashboard
 ```
+
+Bun manages dependencies; Node executes the built CLI (`dist/index.js`).
 
 ## Skills
 
@@ -33,6 +38,7 @@ node dist/index.js dashboard           # Web dashboard
 ## Rules
 
 - `lib/__init__.py` convention does not apply here — this is TypeScript
-- After modifications, rebuild with `npm run build`
+- After modifications, rebuild with `bun run build`
 - Dashboard HTML is a single file with no build step — edit src/dashboard/dashboard.html directly
 - The SPEC.md is the source of truth for what metrics exist and why
+- Use Bun for installs (`bun install`, `bun add`, `bun add -d`); do not create or commit `package-lock.json`
