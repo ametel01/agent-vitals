@@ -1,6 +1,6 @@
 ---
 name: claude-vitals
-version: "1.0.0"
+version: '1.0.0'
 description: >
   Self-quality verification for Claude Code. Scans session logs, computes 20
   behavioral and quality metrics, detects regressions, and applies corrective
@@ -56,20 +56,20 @@ node H:/ClaudeValidate/dist/index.js report
 
 Read the output. Identify every metric in WARNING or DEGRADED range using these benchmarks:
 
-| Metric | Good | Degraded |
-|--------|------|----------|
-| Read:Edit Ratio | >= 6.6 | <= 2.0 |
-| Research:Mutation Ratio | >= 8.7 | <= 2.8 |
-| Blind Edit Rate | <= 6.2% | >= 33.7% |
-| Write vs Edit % | <= 4.9% | >= 11.1% |
-| Thinking Depth (median) | >= 2,200 | <= 600 |
-| Reasoning Loops / 1K | <= 8.2 | >= 26.6 |
-| Laziness Violations / day | 0 | >= 10 |
-| Self-Admitted Failures / 1K | <= 0.1 | >= 0.5 |
-| User Interrupts / 1K | <= 0.9 | >= 11.4 |
-| Sentiment Ratio | >= 4.4 | <= 3.0 |
-| Frustration Rate | <= 5.8% | >= 9.8% |
-| Prompts / Session | >= 35.9 | <= 27.9 |
+| Metric                      | Good     | Degraded |
+| --------------------------- | -------- | -------- |
+| Read:Edit Ratio             | >= 6.6   | <= 2.0   |
+| Research:Mutation Ratio     | >= 8.7   | <= 2.8   |
+| Blind Edit Rate             | <= 6.2%  | >= 33.7% |
+| Write vs Edit %             | <= 4.9%  | >= 11.1% |
+| Thinking Depth (median)     | >= 2,200 | <= 600   |
+| Reasoning Loops / 1K        | <= 8.2   | >= 26.6  |
+| Laziness Violations / day   | 0        | >= 10    |
+| Self-Admitted Failures / 1K | <= 0.1   | >= 0.5   |
+| User Interrupts / 1K        | <= 0.9   | >= 11.4  |
+| Sentiment Ratio             | >= 4.4   | <= 3.0   |
+| Frustration Rate            | <= 5.8%  | >= 9.8%  |
+| Prompts / Session           | >= 35.9  | <= 27.9  |
 
 ### Step 4: Behavioral Corrections
 
@@ -126,6 +126,7 @@ This writes the fixes to `~/.claude/settings.json` and `~/.claude/CLAUDE.md`. Th
 ### Step 5: Report to User
 
 Tell the user directly:
+
 1. Health status (green/yellow/red)
 2. How many of the 20 metrics are good/warning/degraded
 3. Which behaviors you are correcting
@@ -149,6 +150,7 @@ node H:/ClaudeValidate/dist/index.js health
 - RED: Say "Vitals: red" + list critical regressions. Ask user if they want full `/vitals` or to continue with corrections applied.
 
 Regardless of status, always apply baseline behaviors:
+
 - Read every file before editing it
 - Grep for symbol usages before modifying anything
 - Never ask permission to stop

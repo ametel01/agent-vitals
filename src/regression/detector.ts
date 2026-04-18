@@ -1,4 +1,4 @@
-import { VitalsDB } from '../db/database';
+import type { VitalsDB } from '../db/database';
 
 export interface RegressionAlert {
   metric: string;
@@ -119,7 +119,7 @@ export class RegressionDetector {
     // Determine date boundaries for the two 7-day windows.
     // "Current" = most recent 7 days, "Previous" = the 7 days before that.
     const latestRow = this.db.getDateRange();
-    if (!latestRow || !latestRow.max) return alerts;
+    if (!latestRow?.max) return alerts;
 
     const latestDate = new Date(latestRow.max);
 
@@ -144,8 +144,8 @@ export class RegressionDetector {
       // Need data in both windows to compare
       if (currentRows.length === 0 || previousRows.length === 0) continue;
 
-      const currentAvg = this.average(currentRows.map(r => r.value));
-      const previousAvg = this.average(previousRows.map(r => r.value));
+      const currentAvg = this.average(currentRows.map((r) => r.value));
+      const previousAvg = this.average(previousRows.map((r) => r.value));
 
       // Compute the change value depending on mode
       let changeValue: number;
@@ -218,10 +218,10 @@ export class RegressionDetector {
       };
     }
 
-    const hasCritical = alerts.some(a => a.severity === 'critical');
+    const hasCritical = alerts.some((a) => a.severity === 'critical');
 
     if (hasCritical) {
-      const criticalCount = alerts.filter(a => a.severity === 'critical').length;
+      const criticalCount = alerts.filter((a) => a.severity === 'critical').length;
       return {
         status: 'red',
         message: `${criticalCount} critical regression${criticalCount > 1 ? 's' : ''} detected -- immediate attention needed.`,

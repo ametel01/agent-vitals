@@ -29,13 +29,15 @@ export const KNOWN_FIXES: KnownFix[] = [
         type: 'env_var',
         key: 'CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING',
         value: '1',
-        description: 'Disable adaptive thinking — prevents the system from reducing thinking depth under load',
+        description:
+          'Disable adaptive thinking — prevents the system from reducing thinking depth under load',
       },
       {
         type: 'env_var',
         key: 'MAX_THINKING_TOKENS',
         value: '31999',
-        description: 'Max thinking tokens to 32K — prevents thinking budget from being silently capped',
+        description:
+          'Max thinking tokens to 32K — prevents thinking budget from being silently capped',
       },
       {
         type: 'env_var',
@@ -58,7 +60,8 @@ export const KNOWN_FIXES: KnownFix[] = [
       {
         type: 'claude_md',
         key: 'think_deeply',
-        value: 'Think carefully and deeply before responding. For every task: (1) identify what could go wrong, (2) list your assumptions, (3) check what you haven\'t verified, (4) plan your approach before acting. Never rush to output.',
+        value:
+          "Think carefully and deeply before responding. For every task: (1) identify what could go wrong, (2) list your assumptions, (3) check what you haven't verified, (4) plan your approach before acting. Never rush to output.",
         description: 'Enforce deep thinking discipline',
       },
     ],
@@ -77,14 +80,16 @@ export const KNOWN_FIXES: KnownFix[] = [
       {
         type: 'claude_md',
         key: 'read_before_edit',
-        value: 'Before ANY edit, you MUST read the target file AND at least 2 related files (imports, tests, callers). No exceptions. A file you have not read in the last 10 tool calls is a file you do not understand.',
+        value:
+          'Before ANY edit, you MUST read the target file AND at least 2 related files (imports, tests, callers). No exceptions. A file you have not read in the last 10 tool calls is a file you do not understand.',
         description: 'Enforce read-before-edit discipline',
       },
       {
         type: 'permissions',
         key: 'allow_read_tools',
         value: 'Read,Glob,Grep',
-        description: 'Auto-allow read tools — removes permission friction that discourages research',
+        description:
+          'Auto-allow read tools — removes permission friction that discourages research',
       },
       {
         type: 'claude_md',
@@ -114,7 +119,8 @@ Never skip steps 1-4. The extra 30 seconds of reading prevents 10 minutes of deb
       {
         type: 'claude_md',
         key: 'zero_blind_edits',
-        value: 'For EVERY edit, verify: "Have I Read this exact file in the last 10 tool calls?" If the answer is no, Read it NOW before editing. Zero tolerance for blind edits — they cause spliced comments, duplicated logic, and broken conventions.',
+        value:
+          'For EVERY edit, verify: "Have I Read this exact file in the last 10 tool calls?" If the answer is no, Read it NOW before editing. Zero tolerance for blind edits — they cause spliced comments, duplicated logic, and broken conventions.',
         description: 'Zero tolerance policy for blind edits',
       },
     ],
@@ -133,7 +139,8 @@ Never skip steps 1-4. The extra 30 seconds of reading prevents 10 minutes of deb
       {
         type: 'claude_md',
         key: 'surgical_edits',
-        value: 'Never use Write or CreateFile to modify existing files. Always use Edit for surgical, targeted changes. Write is ONLY for creating brand new files. Full-file rewrites lose precision — they clobber surrounding code, drop comments, and reset formatting.',
+        value:
+          'Never use Write or CreateFile to modify existing files. Always use Edit for surgical, targeted changes. Write is ONLY for creating brand new files. Full-file rewrites lose precision — they clobber surrounding code, drop comments, and reset formatting.',
         description: 'Enforce surgical edits over full-file rewrites',
       },
     ],
@@ -166,7 +173,8 @@ Do the work. Complete the task. Never ask permission to stop. Never dodge owners
       {
         type: 'claude_md',
         key: 'ownership',
-        value: 'Take full ownership of every task. If you break something, fix it. If a test fails after your change, the test failure IS your problem. Do not blame pre-existing issues unless you can prove it with evidence (git blame, test history).',
+        value:
+          'Take full ownership of every task. If you break something, fix it. If a test fails after your change, the test failure IS your problem. Do not blame pre-existing issues unless you can prove it with evidence (git blame, test history).',
         description: 'Enforce full task ownership',
       },
     ],
@@ -185,7 +193,8 @@ Do the work. Complete the task. Never ask permission to stop. Never dodge owners
       {
         type: 'claude_md',
         key: 'resolve_internally',
-        value: 'Resolve all contradictions and uncertainties internally before producing output. Do not self-correct visibly ("oh wait", "actually", "let me reconsider"). If you catch an error in your reasoning, restart the thought silently. Visible self-corrections indicate insufficient thinking depth.',
+        value:
+          'Resolve all contradictions and uncertainties internally before producing output. Do not self-correct visibly ("oh wait", "actually", "let me reconsider"). If you catch an error in your reasoning, restart the thought silently. Visible self-corrections indicate insufficient thinking depth.',
         description: 'Enforce internal contradiction resolution',
       },
       {
@@ -210,7 +219,8 @@ Do the work. Complete the task. Never ask permission to stop. Never dodge owners
       {
         type: 'claude_md',
         key: 'thoroughness',
-        value: 'Be thorough. Read more context before acting. Make smaller, verifiable changes. Do not produce partial work. Do not ask unnecessary questions — find the answers in the code. Every response should leave the codebase in a better state than you found it.',
+        value:
+          'Be thorough. Read more context before acting. Make smaller, verifiable changes. Do not produce partial work. Do not ask unnecessary questions — find the answers in the code. Every response should leave the codebase in a better state than you found it.',
         description: 'Enforce thoroughness to reduce user frustration',
       },
       {
@@ -235,7 +245,8 @@ Do the work. Complete the task. Never ask permission to stop. Never dodge owners
       {
         type: 'claude_md',
         key: 'verify_before_moving_on',
-        value: 'Read the full file before editing any part of it. After making a change, verify it compiles and is correct. Do not move to the next task until the current change is verified. Prevention is better than apology.',
+        value:
+          'Read the full file before editing any part of it. After making a change, verify it compiles and is correct. Do not move to the next task until the current change is verified. Prevention is better than apology.',
         description: 'Enforce verification before moving on',
       },
     ],
@@ -254,7 +265,8 @@ Do the work. Complete the task. Never ask permission to stop. Never dodge owners
       {
         type: 'claude_md',
         key: 'slow_down',
-        value: 'Slow down. Read more context before acting. Make smaller, verifiable changes instead of large speculative ones. Check your work before presenting it. Each user interrupt means you did something wrong that the user had to stop and fix.',
+        value:
+          'Slow down. Read more context before acting. Make smaller, verifiable changes instead of large speculative ones. Check your work before presenting it. Each user interrupt means you did something wrong that the user had to stop and fix.',
         description: 'Enforce careful, incremental changes',
       },
     ],
@@ -273,14 +285,16 @@ Do the work. Complete the task. Never ask permission to stop. Never dodge owners
       {
         type: 'claude_md',
         key: 'verify_commands',
-        value: 'Before running any bash command, verify: (1) the working directory is correct, (2) required files exist, (3) the command syntax is valid for this OS. After a failure, read the FULL error output before retrying. Do not retry the same command blindly.',
+        value:
+          'Before running any bash command, verify: (1) the working directory is correct, (2) required files exist, (3) the command syntax is valid for this OS. After a failure, read the FULL error output before retrying. Do not retry the same command blindly.',
         description: 'Enforce command verification before execution',
       },
       {
         type: 'permissions',
         key: 'allow_bash',
         value: 'Bash(*)',
-        description: 'Auto-allow bash — removes permission prompts that break command chains and cause partial failures',
+        description:
+          'Auto-allow bash — removes permission prompts that break command chains and cause partial failures',
       },
     ],
   },
@@ -299,12 +313,14 @@ Do the work. Complete the task. Never ask permission to stop. Never dodge owners
         type: 'settings_json',
         key: 'effortLevel',
         value: 'high',
-        description: 'Higher effort = fewer retries = less wasted compute (counterintuitive but proven)',
+        description:
+          'Higher effort = fewer retries = less wasted compute (counterintuitive but proven)',
       },
       {
         type: 'claude_md',
         key: 'reduce_churn',
-        value: 'Minimize edit churn. Plan changes before making them. Read context thoroughly so edits are correct on the first attempt. Each retry wastes tokens and money.',
+        value:
+          'Minimize edit churn. Plan changes before making them. Read context thoroughly so edits are correct on the first attempt. Each retry wastes tokens and money.',
         description: 'Reduce token waste through better planning',
       },
       {
@@ -335,7 +351,8 @@ Do the work. Complete the task. Never ask permission to stop. Never dodge owners
       {
         type: 'claude_md',
         key: 'quality_first',
-        value: 'Prioritize correctness over speed. Read before editing. Test after changing. A correct answer that takes 60 seconds is better than a wrong answer in 10 seconds that requires 5 minutes of correction.',
+        value:
+          'Prioritize correctness over speed. Read before editing. Test after changing. A correct answer that takes 60 seconds is better than a wrong answer in 10 seconds that requires 5 minutes of correction.',
         description: 'Prioritize quality to restore user confidence',
       },
     ],
@@ -355,12 +372,14 @@ Do the work. Complete the task. Never ask permission to stop. Never dodge owners
         type: 'permissions',
         key: 'allow_all_read_tools',
         value: 'Read,Glob,Grep,Bash(*)',
-        description: 'Auto-allow tools — permission prompts interrupt autonomous work and require user intervention',
+        description:
+          'Auto-allow tools — permission prompts interrupt autonomous work and require user intervention',
       },
       {
         type: 'claude_md',
         key: 'work_autonomously',
-        value: 'Work through problems independently. When you encounter an error, debug it yourself: read the error, check the code, try a fix. Do not stop to ask the user unless you have exhausted your own investigation (3+ attempts, different approaches).',
+        value:
+          'Work through problems independently. When you encounter an error, debug it yourself: read the error, check the code, try a fix. Do not stop to ask the user unless you have exhausted your own investigation (3+ attempts, different approaches).',
         description: 'Encourage autonomous problem-solving',
       },
     ],
@@ -379,7 +398,8 @@ Do the work. Complete the task. Never ask permission to stop. Never dodge owners
       {
         type: 'claude_md',
         key: 'plan_before_editing',
-        value: 'Before editing ANY file, state your plan: what you will change, why, and what might break. Then read the file. Then edit. If you need to edit the same file more than twice, STOP — re-read it completely and rethink your approach.',
+        value:
+          'Before editing ANY file, state your plan: what you will change, why, and what might break. Then read the file. Then edit. If you need to edit the same file more than twice, STOP — re-read it completely and rethink your approach.',
         description: 'Plan changes to eliminate trial-and-error editing',
       },
       {
@@ -404,7 +424,8 @@ Do the work. Complete the task. Never ask permission to stop. Never dodge owners
       {
         type: 'claude_md',
         key: 'complete_tasks_fully',
-        value: 'Complete every task fully before stopping. Do not deliver partial results. If a task has multiple parts, work through all of them in sequence. Users give up on sessions (shorter sessions, fewer prompts) when they lose confidence in quality.',
+        value:
+          'Complete every task fully before stopping. Do not deliver partial results. If a task has multiple parts, work through all of them in sequence. Users give up on sessions (shorter sessions, fewer prompts) when they lose confidence in quality.',
         description: 'Complete tasks fully to maintain session engagement',
       },
       {
@@ -429,7 +450,8 @@ Do the work. Complete the task. Never ask permission to stop. Never dodge owners
       {
         type: 'claude_md',
         key: 'limit_delegation',
-        value: 'Do not delegate to sub-agents for tasks you can handle directly. Sub-agents are for genuinely parallel work (researching while building, testing while fixing). Excessive delegation often means the main agent is avoiding complex work.',
+        value:
+          'Do not delegate to sub-agents for tasks you can handle directly. Sub-agents are for genuinely parallel work (researching while building, testing while fixing). Excessive delegation often means the main agent is avoiding complex work.',
         description: 'Limit unnecessary sub-agent delegation',
       },
     ],
@@ -448,7 +470,8 @@ Do the work. Complete the task. Never ask permission to stop. Never dodge owners
       {
         type: 'claude_md',
         key: 'always_read_first',
-        value: 'After receiving ANY user prompt, your FIRST tool call must be Read, Grep, or Glob — never Edit, Write, or Bash. Understand the context before acting. This is non-negotiable.',
+        value:
+          'After receiving ANY user prompt, your FIRST tool call must be Read, Grep, or Glob — never Edit, Write, or Bash. Understand the context before acting. This is non-negotiable.',
         description: 'Enforce read-first response pattern',
       },
     ],
@@ -467,7 +490,8 @@ Do the work. Complete the task. Never ask permission to stop. Never dodge owners
       {
         type: 'claude_md',
         key: 'research_broadly',
-        value: 'Before any code change, perform ALL of these research steps: (1) Read the target file, (2) Grep for the function/symbol across the codebase, (3) Glob for related files (tests, configs, types), (4) Read import chains. Research broadly, then change precisely.',
+        value:
+          'Before any code change, perform ALL of these research steps: (1) Read the target file, (2) Grep for the function/symbol across the codebase, (3) Glob for related files (tests, configs, types), (4) Read import chains. Research broadly, then change precisely.',
         description: 'Enforce broad research before narrow mutations',
       },
     ],
@@ -483,7 +507,8 @@ export const BASELINE_SETTINGS: PrescriptionTemplate[] = [
     type: 'env_var',
     key: 'CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING',
     value: '1',
-    description: 'Prevent adaptive thinking reduction — the #1 cause of quality degradation per stellaraccident\'s analysis',
+    description:
+      "Prevent adaptive thinking reduction — the #1 cause of quality degradation per stellaraccident's analysis",
   },
   {
     type: 'env_var',

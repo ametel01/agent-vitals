@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 
-import { Command } from 'commander';
 import chalk from 'chalk';
-import { VitalsDB } from './db/database';
-import { Scanner } from './scanner/scanner';
-import { MetricsAnalyzer } from './metrics/analyzer';
+import { Command } from 'commander';
 import { ChangeTracker } from './changes/tracker';
-import { RegressionDetector } from './regression/detector';
-import { TerminalReport } from './reports/terminal';
-import { MarkdownReport } from './reports/markdown';
 import { serveDashboard } from './dashboard/server';
+import { VitalsDB } from './db/database';
+import { MetricsAnalyzer } from './metrics/analyzer';
 import { Prescriber } from './prescriptions/prescriber';
+import { RegressionDetector } from './regression/detector';
+import { MarkdownReport } from './reports/markdown';
+import { TerminalReport } from './reports/terminal';
+import { Scanner } from './scanner/scanner';
 
 const program = new Command();
 
@@ -35,7 +35,8 @@ program
       const result = scanner.scan({ force: opts.force, verbose: opts.verbose });
 
       console.log(chalk.green(`\n✓ Scanned: ${result.scanned} sessions`));
-      if (result.skipped > 0) console.log(chalk.gray(`  Skipped: ${result.skipped} (already scanned)`));
+      if (result.skipped > 0)
+        console.log(chalk.gray(`  Skipped: ${result.skipped} (already scanned)`));
       if (result.errors > 0) console.log(chalk.yellow(`  Errors: ${result.errors}`));
 
       // Detect config changes
@@ -56,7 +57,11 @@ program
 
       const totalSessions = db.getSessionCount();
       const totalToolCalls = db.getToolCallCount();
-      console.log(chalk.bold(`\nTotal: ${totalSessions} sessions, ${totalToolCalls.toLocaleString()} tool calls in database`));
+      console.log(
+        chalk.bold(
+          `\nTotal: ${totalSessions} sessions, ${totalToolCalls.toLocaleString()} tool calls in database`,
+        ),
+      );
     } finally {
       db.close();
     }
@@ -76,10 +81,14 @@ program
     try {
       if (opts.format === 'md' || opts.format === 'markdown') {
         const report = new MarkdownReport(db);
-        console.log(report.generate({ days: parseInt(opts.days) }));
+        console.log(report.generate({ days: parseInt(opts.days, 10) }));
       } else {
         const report = new TerminalReport(db);
-        report.generate({ days: parseInt(opts.days), model: opts.model, project: opts.project });
+        report.generate({
+          days: parseInt(opts.days, 10),
+          model: opts.model,
+          project: opts.project,
+        });
       }
     } finally {
       db.close();
@@ -98,7 +107,12 @@ program
       const health = detector.getHealthStatus();
 
       const icon = health.status === 'green' ? '🟢' : health.status === 'yellow' ? '🟡' : '🔴';
-      const colorFn = health.status === 'green' ? chalk.green : health.status === 'yellow' ? chalk.yellow : chalk.red;
+      const colorFn =
+        health.status === 'green'
+          ? chalk.green
+          : health.status === 'yellow'
+            ? chalk.yellow
+            : chalk.red;
       console.log(`${icon} ${colorFn(health.message)}`);
 
       if (health.alerts.length > 0) {
@@ -129,16 +143,24 @@ program
     console.log(chalk.gray('  These settings should be applied regardless of current metrics.\n'));
 
     for (const b of baselines) {
-      const typeColor = b.type === 'env_var' ? chalk.cyan : b.type === 'settings_json' ? chalk.magenta : chalk.yellow;
-      const typeLabel = b.type === 'env_var' ? 'ENV' : b.type === 'settings_json' ? 'settings.json' : 'permissions';
-      console.log(`  ${typeColor(typeLabel.padEnd(14))} ${chalk.white(b.key)} = ${chalk.green(String(b.value))}`);
+      const typeColor =
+        b.type === 'env_var'
+          ? chalk.cyan
+          : b.type === 'settings_json'
+            ? chalk.magenta
+            : chalk.yellow;
+      const typeLabel =
+        b.type === 'env_var' ? 'ENV' : b.type === 'settings_json' ? 'settings.json' : 'permissions';
+      console.log(
+        `  ${typeColor(typeLabel.padEnd(14))} ${chalk.white(b.key)} = ${chalk.green(String(b.value))}`,
+      );
       console.log(`  ${' '.repeat(14)} ${chalk.gray(b.description)}`);
       console.log('');
     }
 
     if (opts.apply) {
       // Build a fake prescription list to reuse the apply logic
-      const fakePrescriptions = baselines.map(b => ({
+      const fakePrescriptions = baselines.map((b) => ({
         metric: 'baseline',
         metricLabel: 'Baseline',
         currentValue: 0,
@@ -174,7 +196,9 @@ program
       const prescriptions = prescriber.diagnose();
 
       if (prescriptions.length === 0) {
-        console.log(chalk.green('✓ No prescriptions needed — all metrics within acceptable ranges.'));
+        console.log(
+          chalk.green('✓ No prescriptions needed — all metrics within acceptable ranges.'),
+        );
         return;
       }
 
@@ -187,8 +211,8 @@ program
         const lines: string[] = [];
         lines.push('# Quality Prescriptions');
         lines.push('');
-        const criticals = prescriptions.filter(p => p.severity === 'critical');
-        const warnings = prescriptions.filter(p => p.severity === 'warning');
+        const criticals = prescriptions.filter((p) => p.severity === 'critical');
+        const warnings = prescriptions.filter((p) => p.severity === 'warning');
 
         if (criticals.length > 0) {
           lines.push('## Critical Fixes');
@@ -198,9 +222,16 @@ program
             const key = `${p.metric}:${p.fix.key}`;
             if (seen.has(key)) continue;
             seen.add(key);
-            const typeLabel = p.fix.type === 'env_var' ? 'ENV' : p.fix.type === 'settings_json' ? 'settings.json' : 'CLAUDE.md';
+            const typeLabel =
+              p.fix.type === 'env_var'
+                ? 'ENV'
+                : p.fix.type === 'settings_json'
+                  ? 'settings.json'
+                  : 'CLAUDE.md';
             lines.push(`- **${p.metricLabel}** at ${p.currentValue} (threshold: ${p.threshold})`);
-            lines.push(`  - \`${typeLabel}\`: ${p.fix.type === 'claude_md' ? p.fix.description : `${p.fix.key} = ${p.fix.value}`}`);
+            lines.push(
+              `  - \`${typeLabel}\`: ${p.fix.type === 'claude_md' ? p.fix.description : `${p.fix.key} = ${p.fix.value}`}`,
+            );
           }
           lines.push('');
         }
@@ -213,9 +244,16 @@ program
             const key = `${p.metric}:${p.fix.key}`;
             if (seen.has(key)) continue;
             seen.add(key);
-            const typeLabel = p.fix.type === 'env_var' ? 'ENV' : p.fix.type === 'settings_json' ? 'settings.json' : 'CLAUDE.md';
+            const typeLabel =
+              p.fix.type === 'env_var'
+                ? 'ENV'
+                : p.fix.type === 'settings_json'
+                  ? 'settings.json'
+                  : 'CLAUDE.md';
             lines.push(`- **${p.metricLabel}** at ${p.currentValue} (threshold: ${p.threshold})`);
-            lines.push(`  - \`${typeLabel}\`: ${p.fix.type === 'claude_md' ? p.fix.description : `${p.fix.key} = ${p.fix.value}`}`);
+            lines.push(
+              `  - \`${typeLabel}\`: ${p.fix.type === 'claude_md' ? p.fix.description : `${p.fix.key} = ${p.fix.value}`}`,
+            );
           }
           lines.push('');
         }
@@ -225,12 +263,16 @@ program
       }
 
       // Terminal format
-      const criticals = prescriptions.filter(p => p.severity === 'critical');
-      const warnings = prescriptions.filter(p => p.severity === 'warning');
-      const uniqueMetrics = new Set(prescriptions.map(p => p.metric));
+      const criticals = prescriptions.filter((p) => p.severity === 'critical');
+      const warnings = prescriptions.filter((p) => p.severity === 'warning');
+      const uniqueMetrics = new Set(prescriptions.map((p) => p.metric));
 
       console.log(chalk.bold('\n  PRESCRIPTIONS\n'));
-      console.log(chalk.gray(`  ${uniqueMetrics.size} metrics degraded: ${criticals.length > 0 ? chalk.red(`${new Set(criticals.map(p => p.metric)).size} critical`) : ''}${criticals.length > 0 && warnings.length > 0 ? ', ' : ''}${warnings.length > 0 ? chalk.yellow(`${new Set(warnings.map(p => p.metric)).size} warning`) : ''}`));
+      console.log(
+        chalk.gray(
+          `  ${uniqueMetrics.size} metrics degraded: ${criticals.length > 0 ? chalk.red(`${new Set(criticals.map((p) => p.metric)).size} critical`) : ''}${criticals.length > 0 && warnings.length > 0 ? ', ' : ''}${warnings.length > 0 ? chalk.yellow(`${new Set(warnings.map((p) => p.metric)).size} warning`) : ''}`,
+        ),
+      );
       console.log('');
 
       let num = 0;
@@ -245,16 +287,32 @@ program
           num++;
 
           if (!printedMetrics.has(p.metric)) {
-            console.log(chalk.white(`  ${num}. ${p.metricLabel} at ${chalk.red(String(p.currentValue))} (threshold: ${p.threshold})\n`));
+            console.log(
+              chalk.white(
+                `  ${num}. ${p.metricLabel} at ${chalk.red(String(p.currentValue))} (threshold: ${p.threshold})\n`,
+              ),
+            );
           }
 
-          const typeColor = p.fix.type === 'env_var' ? chalk.cyan : p.fix.type === 'settings_json' ? chalk.magenta : chalk.yellow;
-          const typeLabel = p.fix.type === 'env_var' ? 'ENV' : p.fix.type === 'settings_json' ? 'settings.json' : 'CLAUDE.md';
+          const typeColor =
+            p.fix.type === 'env_var'
+              ? chalk.cyan
+              : p.fix.type === 'settings_json'
+                ? chalk.magenta
+                : chalk.yellow;
+          const typeLabel =
+            p.fix.type === 'env_var'
+              ? 'ENV'
+              : p.fix.type === 'settings_json'
+                ? 'settings.json'
+                : 'CLAUDE.md';
 
           if (p.fix.type === 'claude_md') {
             console.log(`     ${typeColor(typeLabel)}: ${p.fix.description}`);
           } else {
-            console.log(`     ${typeColor(typeLabel)}: ${p.fix.key} = ${chalk.white(String(p.fix.value))}`);
+            console.log(
+              `     ${typeColor(typeLabel)}: ${p.fix.key} = ${chalk.white(String(p.fix.value))}`,
+            );
           }
         }
         console.log('');
@@ -268,14 +326,30 @@ program
           printedMetrics.add(`${p.metric}:${p.fix.key}`);
           num++;
 
-          const typeColor = p.fix.type === 'env_var' ? chalk.cyan : p.fix.type === 'settings_json' ? chalk.magenta : chalk.yellow;
-          const typeLabel = p.fix.type === 'env_var' ? 'ENV' : p.fix.type === 'settings_json' ? 'settings.json' : 'CLAUDE.md';
+          const typeColor =
+            p.fix.type === 'env_var'
+              ? chalk.cyan
+              : p.fix.type === 'settings_json'
+                ? chalk.magenta
+                : chalk.yellow;
+          const typeLabel =
+            p.fix.type === 'env_var'
+              ? 'ENV'
+              : p.fix.type === 'settings_json'
+                ? 'settings.json'
+                : 'CLAUDE.md';
 
-          console.log(chalk.white(`  ${num}. ${p.metricLabel} at ${chalk.yellow(String(p.currentValue))} (threshold: ${p.threshold})`));
+          console.log(
+            chalk.white(
+              `  ${num}. ${p.metricLabel} at ${chalk.yellow(String(p.currentValue))} (threshold: ${p.threshold})`,
+            ),
+          );
           if (p.fix.type === 'claude_md') {
             console.log(`     ${typeColor(typeLabel)}: ${p.fix.description}`);
           } else {
-            console.log(`     ${typeColor(typeLabel)}: ${p.fix.key} = ${chalk.white(String(p.fix.value))}`);
+            console.log(
+              `     ${typeColor(typeLabel)}: ${p.fix.key} = ${chalk.white(String(p.fix.value))}`,
+            );
           }
         }
         console.log('');
@@ -287,8 +361,10 @@ program
         console.log(chalk.green.bold('  APPLIED\n'));
         if (result.settingsWritten) {
           console.log(chalk.green(`  ✓ Settings written to ${result.settingsPath}`));
-          if (result.envVarsCount > 0) console.log(chalk.gray(`    ${result.envVarsCount} environment variable(s)`));
-          if (result.settingsCount > 0) console.log(chalk.gray(`    ${result.settingsCount} setting(s)`));
+          if (result.envVarsCount > 0)
+            console.log(chalk.gray(`    ${result.envVarsCount} environment variable(s)`));
+          if (result.settingsCount > 0)
+            console.log(chalk.gray(`    ${result.settingsCount} setting(s)`));
         }
         if (result.claudeMdWritten) {
           console.log(chalk.green(`  ✓ Rules written to ${result.claudeMdPath}`));
@@ -298,8 +374,12 @@ program
         console.log(chalk.gray('  Run "claude-vitals impact" after 7 days to measure the effect.'));
       } else {
         console.log(chalk.gray('  TO APPLY:'));
-        console.log(chalk.white(`    claude-vitals prescribe --apply                # writes to ~/.claude/`));
-        console.log(chalk.white(`    claude-vitals prescribe --apply --target project  # writes to .claude/`));
+        console.log(
+          chalk.white(`    claude-vitals prescribe --apply                # writes to ~/.claude/`),
+        );
+        console.log(
+          chalk.white(`    claude-vitals prescribe --apply --target project  # writes to .claude/`),
+        );
       }
       console.log('');
     } finally {
@@ -315,7 +395,7 @@ program
   .option('--db <path>', 'Custom database path')
   .action((opts) => {
     const db = new VitalsDB(opts.db);
-    serveDashboard(db, parseInt(opts.port));
+    serveDashboard(db, parseInt(opts.port, 10));
   });
 
 // --- compare ---
@@ -337,12 +417,26 @@ program
       }
 
       const metrics = [
-        'read_edit_ratio', 'thinking_depth_median', 'blind_edit_rate', 'laziness_total',
-        'sentiment_ratio', 'frustration_rate', 'session_autonomy_median', 'bash_success_rate',
-        'research_mutation_ratio', 'write_vs_edit_pct', 'reasoning_loops_per_1k',
-        'self_admitted_failures_per_1k', 'user_interrupts_per_1k', 'edit_churn_rate',
-        'subagent_pct', 'cost_estimate', 'prompts_per_session', 'first_tool_read_pct',
-        'thinking_depth_redacted_pct', 'context_pressure'
+        'read_edit_ratio',
+        'thinking_depth_median',
+        'blind_edit_rate',
+        'laziness_total',
+        'sentiment_ratio',
+        'frustration_rate',
+        'session_autonomy_median',
+        'bash_success_rate',
+        'research_mutation_ratio',
+        'write_vs_edit_pct',
+        'reasoning_loops_per_1k',
+        'self_admitted_failures_per_1k',
+        'user_interrupts_per_1k',
+        'edit_churn_rate',
+        'subagent_pct',
+        'cost_estimate',
+        'prompts_per_session',
+        'first_tool_read_pct',
+        'thinking_depth_redacted_pct',
+        'context_pressure',
       ];
 
       console.log(chalk.bold('\n  PERIOD COMPARISON\n'));
@@ -351,7 +445,7 @@ program
 
       const header = `  ${'Metric'.padEnd(32)} ${'Period 1'.padStart(10)} ${'Period 2'.padStart(10)} ${'Change'.padStart(10)}`;
       console.log(chalk.bold(header));
-      console.log(chalk.gray('  ' + '─'.repeat(66)));
+      console.log(chalk.gray(`  ${'─'.repeat(66)}`));
 
       for (const metric of metrics) {
         const data1 = db.getMetricForDateRange(metric, start1, end1);
@@ -360,19 +454,28 @@ program
         const avg1 = data1.length > 0 ? data1.reduce((s, d) => s + d.value, 0) / data1.length : 0;
         const avg2 = data2.length > 0 ? data2.reduce((s, d) => s + d.value, 0) / data2.length : 0;
 
-        const changePct = avg1 !== 0 ? ((avg2 - avg1) / avg1 * 100) : 0;
+        const changePct = avg1 !== 0 ? ((avg2 - avg1) / avg1) * 100 : 0;
         const changeStr = changePct > 0 ? `+${changePct.toFixed(1)}%` : `${changePct.toFixed(1)}%`;
 
-        const higherIsBetter = ['read_edit_ratio', 'thinking_depth_median', 'sentiment_ratio',
-          'session_autonomy_median', 'bash_success_rate', 'prompts_per_session',
-          'research_mutation_ratio', 'first_tool_read_pct'].includes(metric);
+        const higherIsBetter = [
+          'read_edit_ratio',
+          'thinking_depth_median',
+          'sentiment_ratio',
+          'session_autonomy_median',
+          'bash_success_rate',
+          'prompts_per_session',
+          'research_mutation_ratio',
+          'first_tool_read_pct',
+        ].includes(metric);
 
         const isGood = higherIsBetter ? changePct > 5 : changePct < -5;
         const isBad = higherIsBetter ? changePct < -5 : changePct > 5;
         const colorFn = isGood ? chalk.green : isBad ? chalk.red : chalk.gray;
 
         const name = metric.replace(/_/g, ' ').padEnd(32);
-        console.log(`  ${name} ${avg1.toFixed(1).padStart(10)} ${avg2.toFixed(1).padStart(10)} ${colorFn(changeStr.padStart(10))}`);
+        console.log(
+          `  ${name} ${avg1.toFixed(1).padStart(10)} ${avg2.toFixed(1).padStart(10)} ${colorFn(changeStr.padStart(10))}`,
+        );
       }
       console.log('');
     } finally {
@@ -407,7 +510,7 @@ program
     const db = new VitalsDB(opts.db);
     try {
       const tracker = new ChangeTracker(db);
-      const impact = tracker.computeImpact(parseInt(changeId));
+      const impact = tracker.computeImpact(parseInt(changeId, 10));
 
       if (!impact) {
         console.log(chalk.red('Change not found'));
@@ -419,16 +522,26 @@ program
 
       const header = `  ${'Metric'.padEnd(28)} ${'Before'.padStart(10)} ${'After'.padStart(10)} ${'Change'.padStart(10)} ${'Verdict'.padStart(10)}`;
       console.log(chalk.bold(header));
-      console.log(chalk.gray('  ' + '─'.repeat(72)));
+      console.log(chalk.gray(`  ${'─'.repeat(72)}`));
 
-      let improved = 0, degraded = 0, stable = 0;
+      let improved = 0,
+        degraded = 0,
+        stable = 0;
 
       for (const r of impact.results) {
-        const changeStr = r.changePct > 0 ? `+${r.changePct.toFixed(1)}%` : `${r.changePct.toFixed(1)}%`;
-        const verdictColor = r.verdict === 'improved' ? chalk.green : r.verdict === 'degraded' ? chalk.red : chalk.gray;
+        const changeStr =
+          r.changePct > 0 ? `+${r.changePct.toFixed(1)}%` : `${r.changePct.toFixed(1)}%`;
+        const verdictColor =
+          r.verdict === 'improved'
+            ? chalk.green
+            : r.verdict === 'degraded'
+              ? chalk.red
+              : chalk.gray;
 
         const name = r.metric.replace(/_/g, ' ').padEnd(28);
-        console.log(`  ${name} ${r.before.toFixed(1).padStart(10)} ${r.after.toFixed(1).padStart(10)} ${changeStr.padStart(10)} ${verdictColor(r.verdict.padStart(10))}`);
+        console.log(
+          `  ${name} ${r.before.toFixed(1).padStart(10)} ${r.after.toFixed(1).padStart(10)} ${changeStr.padStart(10)} ${verdictColor(r.verdict.padStart(10))}`,
+        );
 
         if (r.verdict === 'improved') improved++;
         else if (r.verdict === 'degraded') degraded++;
@@ -438,11 +551,19 @@ program
       console.log('');
       const total = improved + degraded + stable;
       if (degraded === 0 && improved > 0) {
-        console.log(chalk.green(`  ✓ This change IMPROVED quality across ${improved}/${total} key metrics`));
+        console.log(
+          chalk.green(`  ✓ This change IMPROVED quality across ${improved}/${total} key metrics`),
+        );
       } else if (improved === 0 && degraded > 0) {
-        console.log(chalk.red(`  ✗ This change DEGRADED quality across ${degraded}/${total} key metrics`));
+        console.log(
+          chalk.red(`  ✗ This change DEGRADED quality across ${degraded}/${total} key metrics`),
+        );
       } else {
-        console.log(chalk.yellow(`  ~ Mixed impact: ${improved} improved, ${degraded} degraded, ${stable} stable`));
+        console.log(
+          chalk.yellow(
+            `  ~ Mixed impact: ${improved} improved, ${degraded} degraded, ${stable} stable`,
+          ),
+        );
       }
       console.log('');
     } finally {
@@ -460,14 +581,20 @@ program
     try {
       const changes = db.getAllChanges();
       if (changes.length === 0) {
-        console.log(chalk.gray('No changes tracked yet. Run "claude-vitals scan" or "claude-vitals annotate"'));
+        console.log(
+          chalk.gray(
+            'No changes tracked yet. Run "claude-vitals scan" or "claude-vitals annotate"',
+          ),
+        );
         return;
       }
 
       console.log(chalk.bold('\n  TRACKED CHANGES\n'));
       for (const c of changes) {
         const typeColor = c.type === 'auto' ? chalk.blue : chalk.magenta;
-        console.log(`  ${chalk.gray(`#${c.id}`)} ${typeColor(`[${c.type}]`)} ${c.description} ${chalk.gray(c.timestamp)}`);
+        console.log(
+          `  ${chalk.gray(`#${c.id}`)} ${typeColor(`[${c.type}]`)} ${c.description} ${chalk.gray(c.timestamp)}`,
+        );
       }
       console.log('');
     } finally {

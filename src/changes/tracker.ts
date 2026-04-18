@@ -1,8 +1,8 @@
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
-import crypto from 'crypto';
-import { VitalsDB } from '../db/database';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import type { VitalsDB } from '../db/database';
 
 // Metrics where a higher value is "good"
 const HIGHER_IS_BETTER = new Set([
@@ -14,11 +14,7 @@ const HIGHER_IS_BETTER = new Set([
 ]);
 
 // Metrics where a lower value is "good"
-const LOWER_IS_BETTER = new Set([
-  'blind_edit_rate',
-  'laziness_total',
-  'frustration_rate',
-]);
+const LOWER_IS_BETTER = new Set(['blind_edit_rate', 'laziness_total', 'frustration_rate']);
 
 const IMPACT_METRICS = [
   'read_edit_ratio',
@@ -106,9 +102,8 @@ export class ChangeTracker {
         if (lastHash === hash) continue;
 
         // Content changed (or first time seeing this file) — record it
-        const snapshot = content.length > MAX_SNAPSHOT_BYTES
-          ? content.slice(0, MAX_SNAPSHOT_BYTES)
-          : content;
+        const snapshot =
+          content.length > MAX_SNAPSHOT_BYTES ? content.slice(0, MAX_SNAPSHOT_BYTES) : content;
 
         const wordCount = content.split(/\s+/).filter(Boolean).length;
         const filename = path.basename(filePath);
@@ -150,9 +145,9 @@ export class ChangeTracker {
 
   computeImpact(changeId: number): ImpactSummary | null {
     // Retrieve the change record
-    const change = this.db.db.prepare(
-      'SELECT id, timestamp, description FROM changes WHERE id = ?'
-    ).get(changeId) as { id: number; timestamp: string; description: string } | undefined;
+    const change = this.db.db
+      .prepare('SELECT id, timestamp, description FROM changes WHERE id = ?')
+      .get(changeId) as { id: number; timestamp: string; description: string } | undefined;
 
     if (!change) return null;
 
@@ -182,12 +177,11 @@ export class ChangeTracker {
       const beforeRows = this.db.getMetricForDateRange(metric, beforeStartStr, beforeEndStr);
       const afterRows = this.db.getMetricForDateRange(metric, afterStartStr, afterEndStr);
 
-      const beforeAvg = this.average(beforeRows.map(r => r.value));
-      const afterAvg = this.average(afterRows.map(r => r.value));
+      const beforeAvg = this.average(beforeRows.map((r) => r.value));
+      const afterAvg = this.average(afterRows.map((r) => r.value));
 
-      const changePct = beforeAvg === 0
-        ? (afterAvg === 0 ? 0 : 100)
-        : ((afterAvg - beforeAvg) / beforeAvg) * 100;
+      const changePct =
+        beforeAvg === 0 ? (afterAvg === 0 ? 0 : 100) : ((afterAvg - beforeAvg) / beforeAvg) * 100;
 
       let verdict: 'improved' | 'degraded' | 'stable';
 
@@ -232,9 +226,9 @@ export class ChangeTracker {
   // ---------------------------------------------------------------------------
 
   private getLastStoredHash(filePath: string): string | null {
-    const row = this.db.db.prepare(
-      'SELECT file_hash FROM changes WHERE file_path = ? ORDER BY timestamp DESC LIMIT 1'
-    ).get(filePath) as { file_hash: string } | undefined;
+    const row = this.db.db
+      .prepare('SELECT file_hash FROM changes WHERE file_path = ? ORDER BY timestamp DESC LIMIT 1')
+      .get(filePath) as { file_hash: string } | undefined;
     return row?.file_hash ?? null;
   }
 

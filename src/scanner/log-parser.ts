@@ -1,6 +1,6 @@
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 // ---------------------------------------------------------------------------
 // Types — JSONL line shapes (raw from Claude Code session logs)
@@ -264,19 +264,46 @@ const SELF_ADMITTED_FAILURE_PATTERNS: string[] = [
 ];
 
 const POSITIVE_WORDS: string[] = [
-  'great', 'good', 'love', 'nice', 'fantastic', 'wonderful', 'cool',
-  'excellent', 'perfect', 'beautiful', 'awesome', 'thanks',
+  'great',
+  'good',
+  'love',
+  'nice',
+  'fantastic',
+  'wonderful',
+  'cool',
+  'excellent',
+  'perfect',
+  'beautiful',
+  'awesome',
+  'thanks',
 ];
 
 const NEGATIVE_WORDS: string[] = [
-  'fuck', 'shit', 'damn', 'wrong', 'broken', 'terrible', 'horrible',
-  'awful', 'bad', 'lazy', 'sloppy', 'stop', 'incorrect',
+  'fuck',
+  'shit',
+  'damn',
+  'wrong',
+  'broken',
+  'terrible',
+  'horrible',
+  'awful',
+  'bad',
+  'lazy',
+  'sloppy',
+  'stop',
+  'incorrect',
 ];
 
 const FRUSTRATION_PATTERNS: string[] = [
-  'fuck', 'shit', 'damn',
-  'wrong', 'no', 'stop',
-  'I said', 'I already told you', "that's not what I asked",
+  'fuck',
+  'shit',
+  'damn',
+  'wrong',
+  'no',
+  'stop',
+  'I said',
+  'I already told you',
+  "that's not what I asked",
 ];
 
 // ---------------------------------------------------------------------------
@@ -347,7 +374,11 @@ const GIT_PATTERNS = [
   /\bgit\s+tag\b/,
 ];
 
-function classifyTool(name: string): { category: ToolCategory; isMutation: boolean; isResearch: boolean } {
+function classifyTool(name: string): {
+  category: ToolCategory;
+  isMutation: boolean;
+  isResearch: boolean;
+} {
   if (READ_TOOLS.has(name)) return { category: 'read', isMutation: false, isResearch: true };
   if (EDIT_TOOLS.has(name)) return { category: 'edit', isMutation: true, isResearch: false };
   if (WRITE_TOOLS.has(name)) return { category: 'write', isMutation: true, isResearch: false };
@@ -357,11 +388,15 @@ function classifyTool(name: string): { category: ToolCategory; isMutation: boole
   return { category: 'other', isMutation: false, isResearch: false };
 }
 
-function classifyBashCommand(command: string): { isBuild: boolean; isTest: boolean; isGit: boolean } {
+function classifyBashCommand(command: string): {
+  isBuild: boolean;
+  isTest: boolean;
+  isGit: boolean;
+} {
   return {
-    isBuild: BUILD_PATTERNS.some(p => p.test(command)),
-    isTest: TEST_PATTERNS.some(p => p.test(command)),
-    isGit: GIT_PATTERNS.some(p => p.test(command)),
+    isBuild: BUILD_PATTERNS.some((p) => p.test(command)),
+    isTest: TEST_PATTERNS.some((p) => p.test(command)),
+    isGit: GIT_PATTERNS.some((p) => p.test(command)),
   };
 }
 
@@ -384,8 +419,8 @@ function getSurroundingText(text: string, matchIndex: number, radius: number = 8
   const start = Math.max(0, matchIndex - radius);
   const end = Math.min(text.length, matchIndex + radius);
   let result = text.slice(start, end);
-  if (start > 0) result = '...' + result;
-  if (end < text.length) result = result + '...';
+  if (start > 0) result = `...${result}`;
+  if (end < text.length) result = `${result}...`;
   return result;
 }
 
@@ -412,9 +447,13 @@ function detectReasoningLoops(text: string): TextPatternMatch[] {
   return findPatternMatches(text, REASONING_LOOP_PATTERNS);
 }
 
-function detectLazinessViolations(text: string): Array<TextPatternMatch & { category: LazinessCategory }> {
+function detectLazinessViolations(
+  text: string,
+): Array<TextPatternMatch & { category: LazinessCategory }> {
   const violations: Array<TextPatternMatch & { category: LazinessCategory }> = [];
-  for (const [cat, patterns] of Object.entries(LAZINESS_PATTERNS) as Array<[LazinessCategory, string[]]>) {
+  for (const [cat, patterns] of Object.entries(LAZINESS_PATTERNS) as Array<
+    [LazinessCategory, string[]]
+  >) {
     const matches = findPatternMatches(text, patterns);
     for (const match of matches) {
       violations.push({ ...match, category: cat });
@@ -470,14 +509,17 @@ function flattenContentToText(content: string | ContentBlock[] | undefined): str
   return textParts.join('\n');
 }
 
-function extractToolResultContent(content: string | ContentBlock[] | undefined): ParsedToolResult[] {
+function extractToolResultContent(
+  content: string | ContentBlock[] | undefined,
+): ParsedToolResult[] {
   if (!content || typeof content === 'string' || !Array.isArray(content)) return [];
 
   const results: ParsedToolResult[] = [];
   for (const block of content) {
     if (block.type === 'tool_result') {
       const tr = block as ToolResultBlock;
-      const contentStr = typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content ?? '');
+      const contentStr =
+        typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content ?? '');
       results.push({
         toolUseId: tr.tool_use_id || '',
         content: contentStr,
@@ -527,7 +569,9 @@ function parseUserMessage(entry: RawLogEntry): ParsedUserMessage {
   const wordCount = contentText.split(/\s+/).filter(Boolean).length;
 
   const isHumanPrompt = !isToolResult;
-  const sentiment = isHumanPrompt ? analyzeUserSentiment(contentText) : { positiveWordCount: 0, negativeWordCount: 0, hasFrustration: false };
+  const sentiment = isHumanPrompt
+    ? analyzeUserSentiment(contentText)
+    : { positiveWordCount: 0, negativeWordCount: 0, hasFrustration: false };
 
   return {
     uuid: entry.uuid || null,
@@ -561,7 +605,8 @@ function parseAssistantMessage(entry: RawLogEntry): ParsedAssistantMessage {
     for (const block of content) {
       if (block.type === 'tool_use') {
         const tu = block as ToolUseBlock;
-        const inputObj = (tu.input && typeof tu.input === 'object') ? tu.input as Record<string, unknown> : {};
+        const inputObj =
+          tu.input && typeof tu.input === 'object' ? (tu.input as Record<string, unknown>) : {};
         const classification = classifyTool(tu.name);
         const targetFile = extractTargetFile(inputObj);
         let bashCommand: string | null = null;
@@ -641,7 +686,10 @@ function parseSystemMessage(entry: RawLogEntry): ParsedSystemMessage {
 // Session metadata extraction
 // ---------------------------------------------------------------------------
 
-function extractProjectInfoFromPath(filePath: string): { projectPath: string; projectName: string | null } {
+function extractProjectInfoFromPath(filePath: string): {
+  projectPath: string;
+  projectName: string | null;
+} {
   // Session logs live at ~/.claude/projects/<encoded-project-path>/<sessionId>.jsonl
   // The encoded project path uses URL-encoded slashes: e.g., -Users-foo-myproject or C%3A-Users-...
   const normalized = filePath.replace(/\\/g, '/');
@@ -658,7 +706,7 @@ function extractProjectInfoFromPath(filePath: string): { projectPath: string; pr
   const encodedProjectName = parts[0];
 
   // Decode: replace URL-encoded chars and leading dashes that represent path separators
-  let projectPath = decodeURIComponent(encodedProjectName);
+  const projectPath = decodeURIComponent(encodedProjectName);
   // Common encoding: dashes for slashes on some systems
   // But also real dashes exist in paths, so we only decode if it looks encoded
   // The actual encoding uses the literal directory name, which may have dashes for path separators
@@ -850,7 +898,7 @@ export function discoverSessionLogs(): string[] {
 
   // On Windows, also check common WSL home paths
   if (isWindows) {
-    const wslPaths = [
+    const _wslPaths = [
       // Default WSL distros store homes under \\wsl$\<distro>\home\<user>
       // or \\wsl.localhost\<distro>\home\<user>
       // We check common locations
