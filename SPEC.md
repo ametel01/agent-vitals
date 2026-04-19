@@ -1,4 +1,4 @@
-Build an open source CLI tool called "claude-vitals" that continuously monitors Claude Code quality by analyzing session logs (~/.claude/projects/ on Unix, %USERPROFILE%\.claude\projects\ on Windows, check WSL paths too). TypeScript, Node >= 18, SQLite for storage, single-file HTML dashboard with React + Recharts from CDN. Commander.js CLI. MIT license.
+Build an open source CLI tool called "agent-vitals" that continuously monitors Claude Code quality by analyzing session logs (~/.claude/projects/ on Unix, %USERPROFILE%\.claude\projects\ on Windows, check WSL paths too). TypeScript, Node >= 18, SQLite for storage, single-file HTML dashboard with React + Recharts from CDN. Commander.js CLI. MIT license.
 
 The project is inspired by and replicates the analysis from https://github.com/anthropics/claude-code/issues/42796 — where a power user proved that reduced thinking depth caused measurable quality collapse across 234,760 tool calls. We make that analysis continuous, automatic, and extended with change-impact tracking.
 
@@ -391,11 +391,11 @@ Everything above tells you HOW quality is trending. Change tracking tells you WH
 
 ### What users can annotate manually:
 
-claude-vitals annotate "Switched to Opus"
-claude-vitals annotate "Added error-handling skill"
-claude-vitals annotate "Set /effort max"
-claude-vitals annotate "Rewrote CLAUDE.md testing section"
-claude-vitals annotate "Started 5 concurrent sessions"
+agent-vitals annotate "Switched to Opus"
+agent-vitals annotate "Added error-handling skill"
+agent-vitals annotate "Set /effort max"
+agent-vitals annotate "Rewrote CLAUDE.md testing section"
+agent-vitals annotate "Started 5 concurrent sessions"
 
 ### How to correlate:
 
@@ -418,15 +418,15 @@ Compare rolling 7-day windows. Auto-flag when:
 - Session autonomy drops >25%
 - Bash success rate drops >10 percentage points
 
-Surface in CLI (`claude-vitals health` for one-liner), in reports, and as alert banners on the dashboard.
+Surface in CLI (`agent-vitals health` for one-liner), in reports, and as alert banners on the dashboard.
 
 ---
 
 ## OUTPUTS
 
-**CLI:** `claude-vitals scan` ingests logs into SQLite. `claude-vitals report` prints colored terminal tables with sparklines and trend arrows. `claude-vitals health` gives a one-line green/yellow/red status. `claude-vitals dashboard` launches a local Grafana-style dark-themed web dashboard with all charts. `claude-vitals compare` does side-by-side period comparison. `claude-vitals annotate` logs changes. `claude-vitals impact <change-id>` shows before/after for a specific change.
+**CLI:** `agent-vitals scan` ingests logs into SQLite. `agent-vitals report` prints colored terminal tables with sparklines and trend arrows. `agent-vitals health` gives a one-line green/yellow/red status. `agent-vitals dashboard` launches a local Grafana-style dark-themed web dashboard with all charts. `agent-vitals compare` does side-by-side period comparison. `agent-vitals annotate` logs changes. `agent-vitals impact <change-id>` shows before/after for a specific change.
 
-**Markdown report mode** should produce output structured like the original GitHub analysis — tables, weekly trends, appendices for behavioral patterns, vocabulary analysis. Someone should be able to run `claude-vitals report --format md` and post the result as a GitHub issue.
+**Markdown report mode** should produce output structured like the original GitHub analysis — tables, weekly trends, appendices for behavioral patterns, vocabulary analysis. Someone should be able to run `agent-vitals report --format md` and post the result as a GitHub issue.
 
 **Dashboard** should be a single HTML file, no build step, React + Recharts from CDN, dark theme, with a change timeline across the top so every chart shows when you made changes, and you can click any change to see its impact overlay.
 

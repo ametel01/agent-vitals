@@ -2,7 +2,7 @@
 
 ## Goal
 
-Expand `claude-vitals` so it can ingest Codex CLI sessions and compute comparable agent-quality metrics without weakening the current Claude Code path.
+Expand `agent-vitals` so it can ingest Codex CLI sessions and compute comparable agent-quality metrics without weakening the current Claude Code path.
 
 The key design constraint is provider separation: Claude and Codex logs should normalize into the same internal metric tables, but discovery, parsing, thresholds, prescriptions, and config-change tracking must remain provider-aware.
 
@@ -209,7 +209,7 @@ Document:
 bun install
 bun run check
 bun run build
-node dist/index.js scan --source claude --db /tmp/claude-vitals.db
+node dist/index.js scan --source claude --db /tmp/agent-vitals.db
 ```
 
 Validation:
@@ -268,7 +268,7 @@ this.db.insertToolCall({
 Validation:
 
 - `bun run build`
-- Run `node dist/index.js scan --force --db /tmp/claude-vitals-test.db -v`
+- Run `node dist/index.js scan --force --db /tmp/agent-vitals-test.db -v`
 - Verify:
 
 ```sql
@@ -887,10 +887,10 @@ Files:
 Document:
 
 ```bash
-claude-vitals scan --source claude
-claude-vitals scan --source codex
-claude-vitals scan --source all
-claude-vitals report --source codex
+agent-vitals scan --source claude
+agent-vitals scan --source codex
+agent-vitals scan --source all
+agent-vitals report --source codex
 ```
 
 Explain:

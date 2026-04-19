@@ -1,5 +1,5 @@
 ---
-name: claude-vitals
+name: agent-vitals
 version: '1.0.0'
 description: >
   Self-quality verification for Claude Code. Scans session logs, computes 20
@@ -20,7 +20,7 @@ author: Built on research by @stellaraccident
 license: MIT
 ---
 
-# claude-vitals
+# agent-vitals
 
 Self-quality verification for Claude Code sessions.
 
@@ -121,7 +121,7 @@ If they agree, apply automatically:
 node H:/ClaudeValidate/dist/index.js prescribe --apply
 ```
 
-This writes the fixes to `~/.claude/settings.json` and `~/.claude/CLAUDE.md`. The impact can be measured after 7 days with `claude-vitals impact`.
+This writes the fixes to `~/.claude/settings.json` and `~/.claude/CLAUDE.md`. The impact can be measured after 7 days with `agent-vitals impact`.
 
 ### Step 5: Report to User
 

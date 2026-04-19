@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Install claude-vitals skills into ~/.claude/commands/
+# Install agent-vitals skills into ~/.claude/commands/
 #
 set -euo pipefail
 
@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 COMMANDS_DIR="$HOME/.claude/commands"
 
-echo "Installing claude-vitals skills..."
+echo "Installing agent-vitals skills..."
 
 # Build the project first
 echo "  Building TypeScript..."
@@ -26,7 +26,7 @@ VITALS_BIN="$(cd "$PROJECT_DIR" && pwd)/dist/index.js"
 cat > "$COMMANDS_DIR/vitals.md" << SKILLEOF
 # Self-Quality Verification
 
-Run a full diagnostic using claude-vitals.
+Run a full diagnostic using agent-vitals.
 
 \`\`\`bash
 node $VITALS_BIN scan

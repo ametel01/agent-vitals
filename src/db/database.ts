@@ -27,7 +27,7 @@ type DashboardMetricRow = {
 };
 
 function getDefaultDbPath(): string {
-  const dir = path.join(os.homedir(), '.claude-vitals');
+  const dir = path.join(os.homedir(), '.agent-vitals');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   return path.join(dir, 'vitals.db');
 }

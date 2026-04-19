@@ -1,4 +1,4 @@
-# claude-vitals
+# agent-vitals
 
 CLI tool that monitors Claude Code quality by analyzing session logs. Based on [@stellaraccident's analysis](https://github.com/anthropics/claude-code/issues/42796) of 234,760 tool calls.
 

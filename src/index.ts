@@ -17,8 +17,8 @@ import { Scanner, type SourceFilter } from './scanner/scanner';
 const program = new Command();
 
 program
-  .name('claude-vitals')
-  .description('Continuously monitor Claude Code quality by analyzing session logs')
+  .name('agent-vitals')
+  .description('Continuously monitor AI coding agent quality by analyzing session logs')
   .version('1.1.0');
 
 // --- scan ---
@@ -31,10 +31,10 @@ program
   .description('Ingest agent session logs into the database')
   .option('-f, --force', 'Re-scan all sessions, even previously scanned ones')
   .option('-v, --verbose', 'Show detailed progress')
-  .option('--source <source>', 'Session source: claude, codex, or all', 'claude')
+  .option('--source <source>', 'Session source: claude, codex, or all', 'all')
   .option('--db <path>', 'Custom database path')
   .action((opts) => {
-    const source = opts.source as string;
+    const source = (opts.source as string).toLowerCase();
     const adapters = createSessionAdapters();
     const availableSources = new Set<SourceFilter>([
       'all',
@@ -132,6 +132,50 @@ function resolveReportProvider(source: string | undefined): string {
   process.exit(1);
 }
 
+function prescriptionTypeLabel(type: string): string {
+  switch (type) {
+    case 'env_var':
+      return 'ENV';
+    case 'settings_json':
+      return 'settings.json';
+    case 'claude_md':
+      return 'CLAUDE.md';
+    case 'permissions':
+      return 'permissions';
+    case 'codex_config_toml':
+      return 'Codex config';
+    case 'codex_rules':
+      return 'Codex rules';
+    case 'project_instructions':
+      return 'Project instructions';
+    default:
+      return type;
+  }
+}
+
+function prescriptionTypeColor(type: string) {
+  switch (type) {
+    case 'env_var':
+    case 'codex_config_toml':
+      return chalk.cyan;
+    case 'settings_json':
+    case 'codex_rules':
+      return chalk.magenta;
+    default:
+      return chalk.yellow;
+  }
+}
+
+function prescriptionSummary(p: {
+  fix: { type: string; key: string; value: unknown; description: string };
+}) {
+  if (p.fix.type === 'claude_md') return p.fix.description;
+  if (p.fix.type === 'codex_rules' || p.fix.type === 'project_instructions') {
+    return `${p.fix.key}: ${p.fix.description}`;
+  }
+  return `${p.fix.key} = ${p.fix.value}`;
+}
+
 // --- health ---
 program
   .command('health')
@@ -162,7 +206,7 @@ program
         }
         console.log('');
         if (provider === '_all' || provider === 'claude') {
-          console.log(chalk.gray('  Run "claude-vitals prescribe" for specific fixes.'));
+          console.log(chalk.gray('  Run "agent-vitals prescribe" for specific fixes.'));
         } else {
           console.log(
             chalk.gray(
@@ -181,50 +225,72 @@ program
   .command('baseline')
   .description('Show recommended baseline settings for optimal Claude Code quality')
   .option('--apply', 'Write baseline settings to ~/.claude/settings.json')
+  .option('--source <source>', 'Filter by source: claude, codex, or all', 'all')
   .option('--db <path>', 'Custom database path')
   .action((opts) => {
-    const prescriber = new Prescriber(new VitalsDB(opts.db));
-    const baselines = prescriber.getBaselineRecommendations();
-
-    console.log(chalk.bold('\n  BASELINE SETTINGS FOR OPTIMAL QUALITY\n'));
-    console.log(chalk.gray('  These settings should be applied regardless of current metrics.\n'));
-
-    for (const b of baselines) {
-      const typeColor =
-        b.type === 'env_var'
-          ? chalk.cyan
-          : b.type === 'settings_json'
-            ? chalk.magenta
-            : chalk.yellow;
-      const typeLabel =
-        b.type === 'env_var' ? 'ENV' : b.type === 'settings_json' ? 'settings.json' : 'permissions';
+    const provider = resolveReportProvider(opts.source);
+    if (provider === 'codex') {
       console.log(
-        `  ${typeColor(typeLabel.padEnd(14))} ${chalk.white(b.key)} = ${chalk.green(String(b.value))}`,
+        chalk.yellow(
+          'No Codex baseline settings available yet. Claude baseline settings target ~/.claude.',
+        ),
       );
-      console.log(`  ${' '.repeat(14)} ${chalk.gray(b.description)}`);
-      console.log('');
+      return;
     }
 
-    if (opts.apply) {
-      // Build a fake prescription list to reuse the apply logic
-      const fakePrescriptions = baselines.map((b) => ({
-        metric: 'baseline',
-        metricLabel: 'Baseline',
-        currentValue: 0,
-        threshold: 0,
-        severity: 'warning' as const,
-        fix: b,
-      }));
-      const result = prescriber.apply(fakePrescriptions, { target: 'global' });
-      console.log(chalk.green.bold('  APPLIED\n'));
-      if (result.settingsWritten) {
-        console.log(chalk.green(`  ✓ Settings written to ${result.settingsPath}`));
+    const db = new VitalsDB(opts.db);
+    try {
+      const prescriber = new Prescriber(db);
+      const baselines = prescriber.getBaselineRecommendations();
+
+      console.log(chalk.bold('\n  BASELINE SETTINGS FOR OPTIMAL QUALITY\n'));
+      console.log(
+        chalk.gray('  These settings should be applied regardless of current metrics.\n'),
+      );
+
+      for (const b of baselines) {
+        const typeColor =
+          b.type === 'env_var'
+            ? chalk.cyan
+            : b.type === 'settings_json'
+              ? chalk.magenta
+              : chalk.yellow;
+        const typeLabel =
+          b.type === 'env_var'
+            ? 'ENV'
+            : b.type === 'settings_json'
+              ? 'settings.json'
+              : 'permissions';
+        console.log(
+          `  ${typeColor(typeLabel.padEnd(14))} ${chalk.white(b.key)} = ${chalk.green(String(b.value))}`,
+        );
+        console.log(`  ${' '.repeat(14)} ${chalk.gray(b.description)}`);
+        console.log('');
       }
-      console.log('');
-    } else {
-      console.log(chalk.gray('  TO APPLY:'));
-      console.log(chalk.white('    claude-vitals baseline --apply'));
-      console.log('');
+
+      if (opts.apply) {
+        // Build a fake prescription list to reuse the apply logic
+        const fakePrescriptions = baselines.map((b) => ({
+          metric: 'baseline',
+          metricLabel: 'Baseline',
+          currentValue: 0,
+          threshold: 0,
+          severity: 'warning' as const,
+          fix: b,
+        }));
+        const result = prescriber.apply(fakePrescriptions, { target: 'global' });
+        console.log(chalk.green.bold('  APPLIED\n'));
+        if (result.settingsWritten) {
+          console.log(chalk.green(`  ✓ Settings written to ${result.settingsPath}`));
+        }
+        console.log('');
+      } else {
+        console.log(chalk.gray('  TO APPLY:'));
+        console.log(chalk.white('    agent-vitals baseline --apply'));
+        console.log('');
+      }
+    } finally {
+      db.close();
     }
   });
 
@@ -235,16 +301,27 @@ program
   .option('--apply', 'Actually write the fixes (default: dry-run showing recommendations)')
   .option('--target <scope>', 'Where to apply: global (~/.claude/) or project (.claude/)', 'global')
   .option('-f, --format <format>', 'Output format: terminal, json, or md', 'terminal')
+  .option('--source <source>', 'Filter by source: claude, codex, or all', 'all')
   .option('--db <path>', 'Custom database path')
   .action((opts) => {
+    const provider = resolveReportProvider(opts.source);
     const db = new VitalsDB(opts.db);
     try {
       const prescriber = new Prescriber(db);
-      const prescriptions = prescriber.diagnose();
+      const prescriptions = prescriber.diagnose(provider);
+      const hasCodexPrescriptions = prescriptions.some(
+        (p) =>
+          p.fix.type === 'codex_config_toml' ||
+          p.fix.type === 'codex_rules' ||
+          p.fix.type === 'project_instructions',
+      );
 
       if (prescriptions.length === 0) {
         const providers = db.getProvidersInSessions();
-        if (!providers.includes('claude') && providers.includes('codex')) {
+        if (
+          provider === 'codex' ||
+          (!providers.includes('claude') && providers.includes('codex'))
+        ) {
           console.log(
             chalk.yellow(
               'No Codex prescriptions available yet. Codex-specific fixes are planned separately.',
@@ -256,6 +333,15 @@ program
           );
         }
         return;
+      }
+
+      if (hasCodexPrescriptions && opts.apply) {
+        console.error(
+          chalk.red(
+            'Codex prescription --apply is not implemented yet. Run without --apply to review dry-run targets.',
+          ),
+        );
+        process.exit(1);
       }
 
       if (opts.format === 'json') {
@@ -278,16 +364,12 @@ program
             const key = `${p.metric}:${p.fix.key}`;
             if (seen.has(key)) continue;
             seen.add(key);
-            const typeLabel =
-              p.fix.type === 'env_var'
-                ? 'ENV'
-                : p.fix.type === 'settings_json'
-                  ? 'settings.json'
-                  : 'CLAUDE.md';
+            const typeLabel = prescriptionTypeLabel(p.fix.type);
             lines.push(`- **${p.metricLabel}** at ${p.currentValue} (threshold: ${p.threshold})`);
-            lines.push(
-              `  - \`${typeLabel}\`: ${p.fix.type === 'claude_md' ? p.fix.description : `${p.fix.key} = ${p.fix.value}`}`,
-            );
+            lines.push(`  - \`${typeLabel}\`: ${prescriptionSummary(p)}`);
+            if (p.fix.type === 'codex_rules' || p.fix.type === 'project_instructions') {
+              lines.push(`  - Rule: ${p.fix.value}`);
+            }
           }
           lines.push('');
         }
@@ -300,16 +382,12 @@ program
             const key = `${p.metric}:${p.fix.key}`;
             if (seen.has(key)) continue;
             seen.add(key);
-            const typeLabel =
-              p.fix.type === 'env_var'
-                ? 'ENV'
-                : p.fix.type === 'settings_json'
-                  ? 'settings.json'
-                  : 'CLAUDE.md';
+            const typeLabel = prescriptionTypeLabel(p.fix.type);
             lines.push(`- **${p.metricLabel}** at ${p.currentValue} (threshold: ${p.threshold})`);
-            lines.push(
-              `  - \`${typeLabel}\`: ${p.fix.type === 'claude_md' ? p.fix.description : `${p.fix.key} = ${p.fix.value}`}`,
-            );
+            lines.push(`  - \`${typeLabel}\`: ${prescriptionSummary(p)}`);
+            if (p.fix.type === 'codex_rules' || p.fix.type === 'project_instructions') {
+              lines.push(`  - Rule: ${p.fix.value}`);
+            }
           }
           lines.push('');
         }
@@ -350,21 +428,14 @@ program
             );
           }
 
-          const typeColor =
-            p.fix.type === 'env_var'
-              ? chalk.cyan
-              : p.fix.type === 'settings_json'
-                ? chalk.magenta
-                : chalk.yellow;
-          const typeLabel =
-            p.fix.type === 'env_var'
-              ? 'ENV'
-              : p.fix.type === 'settings_json'
-                ? 'settings.json'
-                : 'CLAUDE.md';
+          const typeColor = prescriptionTypeColor(p.fix.type);
+          const typeLabel = prescriptionTypeLabel(p.fix.type);
 
           if (p.fix.type === 'claude_md') {
             console.log(`     ${typeColor(typeLabel)}: ${p.fix.description}`);
+          } else if (p.fix.type === 'codex_rules' || p.fix.type === 'project_instructions') {
+            console.log(`     ${typeColor(typeLabel)}: ${p.fix.key} — ${p.fix.description}`);
+            console.log(`     ${chalk.gray(String(p.fix.value))}`);
           } else {
             console.log(
               `     ${typeColor(typeLabel)}: ${p.fix.key} = ${chalk.white(String(p.fix.value))}`,
@@ -382,18 +453,8 @@ program
           printedMetrics.add(`${p.metric}:${p.fix.key}`);
           num++;
 
-          const typeColor =
-            p.fix.type === 'env_var'
-              ? chalk.cyan
-              : p.fix.type === 'settings_json'
-                ? chalk.magenta
-                : chalk.yellow;
-          const typeLabel =
-            p.fix.type === 'env_var'
-              ? 'ENV'
-              : p.fix.type === 'settings_json'
-                ? 'settings.json'
-                : 'CLAUDE.md';
+          const typeColor = prescriptionTypeColor(p.fix.type);
+          const typeLabel = prescriptionTypeLabel(p.fix.type);
 
           console.log(
             chalk.white(
@@ -402,6 +463,9 @@ program
           );
           if (p.fix.type === 'claude_md') {
             console.log(`     ${typeColor(typeLabel)}: ${p.fix.description}`);
+          } else if (p.fix.type === 'codex_rules' || p.fix.type === 'project_instructions') {
+            console.log(`     ${typeColor(typeLabel)}: ${p.fix.key} — ${p.fix.description}`);
+            console.log(`     ${chalk.gray(String(p.fix.value))}`);
           } else {
             console.log(
               `     ${typeColor(typeLabel)}: ${p.fix.key} = ${chalk.white(String(p.fix.value))}`,
@@ -427,15 +491,27 @@ program
           console.log(chalk.gray(`    ${result.claudeMdRulesCount} behavioral rule(s)`));
         }
         console.log('');
-        console.log(chalk.gray('  Run "claude-vitals impact" after 7 days to measure the effect.'));
+        console.log(chalk.gray('  Run "agent-vitals impact" after 7 days to measure the effect.'));
       } else {
-        console.log(chalk.gray('  TO APPLY:'));
-        console.log(
-          chalk.white(`    claude-vitals prescribe --apply                # writes to ~/.claude/`),
-        );
-        console.log(
-          chalk.white(`    claude-vitals prescribe --apply --target project  # writes to .claude/`),
-        );
+        if (hasCodexPrescriptions) {
+          console.log(chalk.gray('  DRY RUN ONLY:'));
+          console.log(
+            chalk.white(
+              '    Review the suggested ~/.codex/config.toml, ~/.codex/rules/*.rules, and AGENTS.md changes.',
+            ),
+          );
+          console.log(chalk.gray('    Codex --apply is intentionally not implemented yet.'));
+        } else {
+          console.log(chalk.gray('  TO APPLY:'));
+          console.log(
+            chalk.white(`    agent-vitals prescribe --apply                # writes to ~/.claude/`),
+          );
+          console.log(
+            chalk.white(
+              `    agent-vitals prescribe --apply --target project  # writes to .claude/`,
+            ),
+          );
+        }
       }
       console.log('');
     } finally {
@@ -448,10 +524,12 @@ program
   .command('dashboard')
   .description('Launch the web dashboard')
   .option('-p, --port <number>', 'Port number', '7847')
+  .option('--source <source>', 'Default dashboard source: claude, codex, or all', 'all')
   .option('--db <path>', 'Custom database path')
   .action((opts) => {
+    const provider = resolveReportProvider(opts.source);
     const db = new VitalsDB(opts.db);
-    serveDashboard(db, parseInt(opts.port, 10));
+    serveDashboard(db, parseInt(opts.port, 10), provider);
   });
 
 // --- compare ---
@@ -460,8 +538,10 @@ program
   .description('Compare two time periods side by side')
   .argument('<period1>', 'First period (e.g., 2024-01-01:2024-01-07)')
   .argument('<period2>', 'Second period (e.g., 2024-01-08:2024-01-14)')
+  .option('--source <source>', 'Filter by source: claude, codex, or all', 'all')
   .option('--db <path>', 'Custom database path')
   .action((period1, period2, opts) => {
+    const provider = resolveReportProvider(opts.source);
     const db = new VitalsDB(opts.db);
     try {
       const [start1, end1] = period1.split(':');
@@ -498,14 +578,15 @@ program
       console.log(chalk.bold('\n  PERIOD COMPARISON\n'));
       console.log(chalk.gray(`  Period 1: ${start1} → ${end1}`));
       console.log(chalk.gray(`  Period 2: ${start2} → ${end2}\n`));
+      console.log(chalk.gray(`  Source: ${provider === '_all' ? 'all providers' : provider}\n`));
 
       const header = `  ${'Metric'.padEnd(32)} ${'Period 1'.padStart(10)} ${'Period 2'.padStart(10)} ${'Change'.padStart(10)}`;
       console.log(chalk.bold(header));
       console.log(chalk.gray(`  ${'─'.repeat(66)}`));
 
       for (const metric of metrics) {
-        const data1 = db.getMetricForDateRange(metric, start1, end1);
-        const data2 = db.getMetricForDateRange(metric, start2, end2);
+        const data1 = db.getMetricForDateRange(metric, start1, end1, provider);
+        const data2 = db.getMetricForDateRange(metric, start2, end2, provider);
 
         const avg1 = data1.length > 0 ? data1.reduce((s, d) => s + d.value, 0) / data1.length : 0;
         const avg2 = data2.length > 0 ? data2.reduce((s, d) => s + d.value, 0) / data2.length : 0;
@@ -544,8 +625,10 @@ program
   .command('annotate')
   .description('Log a manual change event')
   .argument('<description>', 'Description of the change')
+  .option('--source <source>', 'Accepted for CLI consistency: claude, codex, or all', 'all')
   .option('--db <path>', 'Custom database path')
   .action((description, opts) => {
+    resolveReportProvider(opts.source);
     const db = new VitalsDB(opts.db);
     try {
       const tracker = new ChangeTracker(db);
@@ -561,12 +644,14 @@ program
   .command('impact')
   .description('Show before/after metrics for a specific change')
   .argument('<change-id>', 'Change ID (from report or annotate)')
+  .option('--source <source>', 'Filter metrics by source: claude, codex, or all', 'all')
   .option('--db <path>', 'Custom database path')
   .action((changeId, opts) => {
+    const provider = resolveReportProvider(opts.source);
     const db = new VitalsDB(opts.db);
     try {
       const tracker = new ChangeTracker(db);
-      const impact = tracker.computeImpact(parseInt(changeId, 10));
+      const impact = tracker.computeImpact(parseInt(changeId, 10), provider);
 
       if (!impact) {
         console.log(chalk.red('Change not found'));
@@ -575,6 +660,7 @@ program
 
       console.log(chalk.bold(`\n  IMPACT ANALYSIS — Change #${changeId}\n`));
       console.log(chalk.gray(`  "${impact.description}" (${impact.timestamp})\n`));
+      console.log(chalk.gray(`  Source: ${provider === '_all' ? 'all providers' : provider}\n`));
 
       const header = `  ${'Metric'.padEnd(28)} ${'Before'.padStart(10)} ${'After'.padStart(10)} ${'Change'.padStart(10)} ${'Verdict'.padStart(10)}`;
       console.log(chalk.bold(header));
@@ -631,16 +717,16 @@ program
 program
   .command('changes')
   .description('List all tracked changes')
+  .option('--source <source>', 'Accepted for CLI consistency: claude, codex, or all', 'all')
   .option('--db <path>', 'Custom database path')
   .action((opts) => {
+    resolveReportProvider(opts.source);
     const db = new VitalsDB(opts.db);
     try {
       const changes = db.getAllChanges();
       if (changes.length === 0) {
         console.log(
-          chalk.gray(
-            'No changes tracked yet. Run "claude-vitals scan" or "claude-vitals annotate"',
-          ),
+          chalk.gray('No changes tracked yet. Run "agent-vitals scan" or "agent-vitals annotate"'),
         );
         return;
       }

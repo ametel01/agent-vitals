@@ -143,7 +143,7 @@ export class ChangeTracker {
   // computeImpact — measure before/after effect of a change on key metrics
   // ---------------------------------------------------------------------------
 
-  computeImpact(changeId: number): ImpactSummary | null {
+  computeImpact(changeId: number, provider: string = '_all'): ImpactSummary | null {
     // Retrieve the change record
     const change = this.db.db
       .prepare('SELECT id, timestamp, description FROM changes WHERE id = ?')
@@ -174,8 +174,13 @@ export class ChangeTracker {
     const results: ImpactSummary['results'] = [];
 
     for (const metric of IMPACT_METRICS) {
-      const beforeRows = this.db.getMetricForDateRange(metric, beforeStartStr, beforeEndStr);
-      const afterRows = this.db.getMetricForDateRange(metric, afterStartStr, afterEndStr);
+      const beforeRows = this.db.getMetricForDateRange(
+        metric,
+        beforeStartStr,
+        beforeEndStr,
+        provider,
+      );
+      const afterRows = this.db.getMetricForDateRange(metric, afterStartStr, afterEndStr, provider);
 
       const beforeAvg = this.average(beforeRows.map((r) => r.value));
       const afterAvg = this.average(afterRows.map((r) => r.value));

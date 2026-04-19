@@ -7,7 +7,7 @@
 - **`prescribe` command** — analyzes degraded metrics and outputs specific fixes: environment variables (`CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING`, `MAX_THINKING_TOKENS`), `settings.json` values (`effortLevel`, `showThinkingSummaries`), and `CLAUDE.md` behavioral rules. Supports `--apply` to write fixes automatically, `--target project` for project-level scope, and `--format json/md` for machine-readable output.
 - **Documentation site** — single-file HTML at `docs/index.html` for GitHub Pages. Covers all 20 metrics, CLI reference, prescriptions guide, configuration best practices, and the stellaraccident backstory.
 - **Prescription integration in `/vitals` skill** — Step 4.5 runs `prescribe` and reports config-level fixes alongside behavioral corrections.
-- **Health command hint** — `claude-vitals health` now suggests running `prescribe` when regressions are detected.
+- **Health command hint** — `agent-vitals health` now suggests running `prescribe` when regressions are detected.
 
 ### Changed
 

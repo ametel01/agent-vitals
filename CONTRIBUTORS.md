@@ -8,7 +8,7 @@ Bun is the package manager. The published CLI still runs on Node (`#!/usr/bin/en
 bun install
 bun run check
 bun run build
-node dist/index.js scan --source claude --db /tmp/claude-vitals.db
+node dist/index.js scan --source claude --db /tmp/agent-vitals.db
 ```
 
 Useful scripts:

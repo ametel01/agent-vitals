@@ -9,12 +9,12 @@ function getErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-function resolveSourceParam(source: string | null): string {
-  if (!source) return '_all';
+function resolveSourceParam(source: string | null, defaultProvider: string): string {
+  if (!source) return defaultProvider;
   const s = source.toLowerCase();
   if (s === 'all') return '_all';
   if (s === 'claude' || s === 'codex') return s;
-  return '_all';
+  return defaultProvider;
 }
 
 function resolveHtmlPath(): string {
@@ -29,7 +29,7 @@ function resolveHtmlPath(): string {
   throw new Error(`Cannot find dashboard.html. Looked at:\n  ${nextToCompiled}\n  ${inSourceTree}`);
 }
 
-export function serveDashboard(db: VitalsDB, port: number) {
+export function serveDashboard(db: VitalsDB, port: number, defaultProvider: string = '_all') {
   const server = http.createServer((req, res) => {
     // CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -45,7 +45,7 @@ export function serveDashboard(db: VitalsDB, port: number) {
     const url = req.url || '/';
     const parsedUrl = new URL(url, `http://localhost:${port}`);
     const pathname = parsedUrl.pathname;
-    const provider = resolveSourceParam(parsedUrl.searchParams.get('source'));
+    const provider = resolveSourceParam(parsedUrl.searchParams.get('source'), defaultProvider);
 
     try {
       if (pathname === '/' || pathname === '/index.html') {

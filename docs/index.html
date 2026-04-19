@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>claude-vitals &mdash; Continuous Quality Monitoring for Claude Code</title>
+<title>agent-vitals &mdash; Continuous Quality Monitoring for Claude Code</title>
 <meta name="description" content="Monitor Claude Code quality by analyzing session logs. 20 metrics, regression detection, and automated prescriptions based on analysis of 234,760 tool calls.">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -136,18 +136,18 @@ footer a{color:var(--accent)}
 
 <!-- HERO -->
 <section id="hero">
-  <h1 class="hero-title">claude-vitals</h1>
+  <h1 class="hero-title">agent-vitals</h1>
   <p class="hero-tag">Your AI coding assistant's quality is invisible. You feel it getting worse but can't prove it. Now you can.</p>
   <div class="stat-row">
     <div class="stat"><div class="num">20</div><div class="label">metrics tracked</div></div>
     <div class="stat"><div class="num">234K</div><div class="label">tool calls analyzed</div></div>
     <div class="stat"><div class="num">7-day</div><div class="label">rolling regression</div></div>
   </div>
-  <div class="hero-install"><span class="copy-btn" onclick="copyBlock(this)">copy</span>git clone https://github.com/Okohedeki/claude-vitals.git
-cd claude-vitals
+  <div class="hero-install"><span class="copy-btn" onclick="copyBlock(this)">copy</span>git clone https://github.com/ametel01/agent-vitals.git
+cd agent-vitals
 npm install && npm run build</div>
   <div class="hero-btns">
-    <a class="btn btn-primary" href="https://github.com/Okohedeki/claude-vitals" target="_blank">View on GitHub</a>
+    <a class="btn btn-primary" href="https://github.com/ametel01/agent-vitals" target="_blank">View on GitHub</a>
     <a class="btn btn-secondary" href="#quickstart">Quick Start</a>
   </div>
 </section>
@@ -169,7 +169,7 @@ npm install && npm run build</div>
     <div class="stat bad"><div class="num">-67%</div><div class="label">Thinking depth</div></div>
   </div>
   <p style="margin:1rem 0;font-size:.88rem;color:var(--text-dim)">Thinking depth dropped 67% before anyone noticed &mdash; because redaction hid it. By the time users felt the change, it had already been degrading for weeks.</p>
-  <p style="font-size:.88rem"><strong style="color:var(--green)">claude-vitals</strong> makes that analysis continuous, automatic, and actionable.</p>
+  <p style="font-size:.88rem"><strong style="color:var(--green)">agent-vitals</strong> makes that analysis continuous, automatic, and actionable.</p>
   <p style="margin-top:.6rem"><a href="https://github.com/anthropics/claude-code/issues/42796" target="_blank">Read the original analysis &rarr;</a></p>
 </section>
 
@@ -179,19 +179,19 @@ npm install && npm run build</div>
   <div class="paths">
     <div class="path">
       <h3 style="color:var(--green)">Full Setup <span class="badge badge-green">5 min</span></h3>
-      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>git clone https://github.com/Okohedeki/claude-vitals.git
-cd claude-vitals
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>git clone https://github.com/ametel01/agent-vitals.git
+cd agent-vitals
 npm install
 npm run build
 bash scripts/install.sh
-claude-vitals scan</pre>
+agent-vitals scan</pre>
       <p style="font-size:.8rem;color:var(--text-dim);margin-top:.5rem">Installs the CLI, skill commands, and runs your first scan.</p>
     </div>
     <div class="path">
       <h3 style="color:var(--accent)">Already Installed?</h3>
-      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals scan && claude-vitals health</pre>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>agent-vitals scan && agent-vitals health</pre>
       <p style="font-size:.8rem;color:var(--text-dim);margin-top:.5rem">Ingest new logs and get a one-line status.</p>
-      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals prescribe</pre>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>agent-vitals prescribe</pre>
       <p style="font-size:.8rem;color:var(--text-dim);margin-top:.5rem">Get specific fixes for any degraded metrics.</p>
     </div>
   </div>
@@ -239,64 +239,64 @@ claude-vitals scan</pre>
     <div class="card">
       <h3>scan</h3>
       <p>Ingest Claude Code session logs into the database. Detects config changes and computes all metrics.</p>
-      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals scan
-claude-vitals scan --force
-claude-vitals scan --verbose</pre>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>agent-vitals scan
+agent-vitals scan --force
+agent-vitals scan --verbose</pre>
       <p style="margin-top:.4rem"><code>--force</code> re-scans all sessions. <code>--verbose</code> shows detailed progress. <code>--db &lt;path&gt;</code> uses a custom database.</p>
     </div>
     <div class="card">
       <h3>health</h3>
       <p>One-line green/yellow/red health status with alerts.</p>
-      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals health</pre>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>agent-vitals health</pre>
       <p style="margin-top:.4rem">Returns an exit code matching severity. Pipe into CI or cron jobs.</p>
     </div>
     <div class="card">
       <h3>report</h3>
       <p>Generate a full quality report with trends, sparklines, and benchmarks.</p>
-      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals report
-claude-vitals report --format md
-claude-vitals report --days 14
-claude-vitals report --model opus</pre>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>agent-vitals report
+agent-vitals report --format md
+agent-vitals report --days 14
+agent-vitals report --model opus</pre>
       <p style="margin-top:.4rem"><code>--format md</code> outputs GitHub-postable Markdown. <code>--days</code> sets the window. <code>--model</code> / <code>--project</code> filter data.</p>
     </div>
     <div class="card">
       <h3>prescribe</h3>
       <p>Analyze degraded metrics and prescribe specific fixes: env vars, settings.json, CLAUDE.md rules.</p>
-      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals prescribe
-claude-vitals prescribe --apply
-claude-vitals prescribe --target project
-claude-vitals prescribe --format json</pre>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>agent-vitals prescribe
+agent-vitals prescribe --apply
+agent-vitals prescribe --target project
+agent-vitals prescribe --format json</pre>
       <p style="margin-top:.4rem"><code>--apply</code> writes fixes. Default is dry-run. <code>--target</code> chooses global vs project scope.</p>
     </div>
     <div class="card">
       <h3>dashboard</h3>
       <p>Launch a local Grafana-style web dashboard with all charts and a change timeline.</p>
-      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals dashboard</pre>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>agent-vitals dashboard</pre>
       <p style="margin-top:.4rem">Opens in your default browser. Dark theme, responsive, real-time data.</p>
     </div>
     <div class="card">
       <h3>compare</h3>
       <p>Side-by-side period comparison for all metrics.</p>
-      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals compare</pre>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>agent-vitals compare</pre>
       <p style="margin-top:.4rem">Compares two time periods to show improvement or regression across every metric.</p>
     </div>
     <div class="card">
       <h3>annotate</h3>
       <p>Log a manual change event for impact tracking.</p>
-      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals annotate "Switched to Opus"
-claude-vitals annotate "Added error-handling skill"
-claude-vitals annotate "Set /effort max"</pre>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>agent-vitals annotate "Switched to Opus"
+agent-vitals annotate "Added error-handling skill"
+agent-vitals annotate "Set /effort max"</pre>
     </div>
     <div class="card">
       <h3>impact</h3>
       <p>Show before/after metrics for a specific change event.</p>
-      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals impact 3</pre>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>agent-vitals impact 3</pre>
       <p style="margin-top:.4rem">Computes all 20 metrics for 7 days before and after the change, with a verdict.</p>
     </div>
     <div class="card">
       <h3>changes</h3>
       <p>List all detected and annotated changes.</p>
-      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals changes</pre>
+      <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>agent-vitals changes</pre>
       <p style="margin-top:.4rem">Shows config file changes, manual annotations, and their timestamps.</p>
     </div>
   </div>
@@ -305,7 +305,7 @@ claude-vitals annotate "Set /effort max"</pre>
 <!-- PRESCRIPTIONS -->
 <section id="prescriptions">
   <h2>Prescriptions</h2>
-  <div class="callout good">claude-vitals doesn't just detect problems &mdash; it prescribes specific fixes. Three types: <span class="rx-type rx-env">ENV</span> environment variables, <span class="rx-type rx-settings">settings.json</span> values, and <span class="rx-type rx-claude">CLAUDE.md</span> rules.</div>
+  <div class="callout good">agent-vitals doesn't just detect problems &mdash; it prescribes specific fixes. Three types: <span class="rx-type rx-env">ENV</span> environment variables, <span class="rx-type rx-settings">settings.json</span> values, and <span class="rx-type rx-claude">CLAUDE.md</span> rules.</div>
 
   <div class="table-wrap">
     <table>
@@ -326,11 +326,11 @@ claude-vitals annotate "Set /effort max"</pre>
   </div>
 
   <h3>Dry Run (default)</h3>
-  <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals prescribe</pre>
+  <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>agent-vitals prescribe</pre>
   <p style="font-size:.85rem;color:var(--text-dim);margin:.4rem 0">Shows what would be changed without writing anything.</p>
 
   <h3>Auto-Apply Fixes</h3>
-  <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals prescribe --apply</pre>
+  <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>agent-vitals prescribe --apply</pre>
   <p style="font-size:.85rem;color:var(--text-dim);margin:.4rem 0">Writes environment variables, updates settings.json, and appends rules to CLAUDE.md.</p>
 </section>
 
@@ -367,7 +367,7 @@ claude-vitals annotate "Set /effort max"</pre>
   <p style="font-size:.85rem;margin-bottom:1rem">Everything above tells you <em>how</em> quality is trending. Change tracking tells you <em>why</em>.</p>
 
   <h3>Automatic Detection</h3>
-  <p style="font-size:.85rem;color:var(--text-dim)">On every <code>scan</code>, claude-vitals hashes and diffs these files:</p>
+  <p style="font-size:.85rem;color:var(--text-dim)">On every <code>scan</code>, agent-vitals hashes and diffs these files:</p>
   <ul style="font-size:.85rem;color:var(--text-dim);margin:.5rem 0 1rem 1.5rem">
     <li><code>~/.claude/CLAUDE.md</code> and per-project CLAUDE.md files</li>
     <li><code>settings.json</code> (model config, effort level, permissions)</li>
@@ -375,13 +375,13 @@ claude-vitals annotate "Set /effort max"</pre>
   </ul>
 
   <h3>Manual Annotations</h3>
-  <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals annotate "Switched to Opus"
-claude-vitals annotate "Rewrote CLAUDE.md testing section"
-claude-vitals annotate "Started 5 concurrent sessions"</pre>
+  <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>agent-vitals annotate "Switched to Opus"
+agent-vitals annotate "Rewrote CLAUDE.md testing section"
+agent-vitals annotate "Started 5 concurrent sessions"</pre>
 
   <h3>Impact Analysis</h3>
   <p style="font-size:.85rem;color:var(--text-dim);margin:.5rem 0">For every change, compute all 20 metrics for 7 days before and 7 days after:</p>
-  <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals impact 3</pre>
+  <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>agent-vitals impact 3</pre>
   <pre style="color:var(--text-dim);font-size:.78rem">Change #3: "Switched to Opus" (2025-06-15)
 
   Metric              Before    After    Delta
@@ -445,7 +445,7 @@ Do the work. Don't ask permission to do the work.
 <section id="dashboard">
   <h2>Dashboard</h2>
   <p style="font-size:.85rem;margin-bottom:1rem">A single-file, Grafana-inspired web dashboard for visual exploration of all quality metrics.</p>
-  <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>claude-vitals dashboard</pre>
+  <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>agent-vitals dashboard</pre>
   <p style="font-size:.85rem;color:var(--text-dim);margin:.5rem 0">Launches a local HTTP server and opens the dashboard in your default browser.</p>
 
   <h3>Features</h3>
@@ -464,8 +464,8 @@ Do the work. Don't ask permission to do the work.
 <!-- Footer -->
 <footer>
   Built on research by <a href="https://github.com/anthropics/claude-code/issues/42796" target="_blank">@stellaraccident</a>
-  &nbsp;&middot;&nbsp; <a href="https://github.com/Okohedeki/claude-vitals/blob/main/LICENSE" target="_blank">MIT License</a>
-  &nbsp;&middot;&nbsp; <a href="https://github.com/Okohedeki/claude-vitals" target="_blank">GitHub</a>
+  &nbsp;&middot;&nbsp; <a href="https://github.com/ametel01/agent-vitals/blob/main/LICENSE" target="_blank">MIT License</a>
+  &nbsp;&middot;&nbsp; <a href="https://github.com/ametel01/agent-vitals" target="_blank">GitHub</a>
 </footer>
 
 </div><!-- .main -->

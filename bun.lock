@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "claude-vitals",
+      "name": "agent-vitals",
       "dependencies": {
         "better-sqlite3": "^11.7.0",
         "chalk": "^4.1.2",

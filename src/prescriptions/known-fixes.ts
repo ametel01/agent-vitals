@@ -1,5 +1,13 @@
 export interface PrescriptionTemplate {
-  type: 'env_var' | 'settings_json' | 'claude_md' | 'permissions' | 'hook';
+  type:
+    | 'env_var'
+    | 'settings_json'
+    | 'claude_md'
+    | 'permissions'
+    | 'hook'
+    | 'codex_config_toml'
+    | 'codex_rules'
+    | 'project_instructions';
   key: string;
   value: string | number | boolean;
   description: string;

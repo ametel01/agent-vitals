@@ -1,46 +1,58 @@
 Your AI coding assistant's quality is invisible. You feel it getting worse but can't prove it. Now you can.
 
-# claude-vitals
+# agent-vitals
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node.js >= 18](https://img.shields.io/badge/node-%3E%3D18-green.svg)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-blue.svg)](https://www.typescriptlang.org/)
-[![Docs](https://img.shields.io/badge/docs-claude--vitals-00d4ff.svg)](https://okohedeki.github.io/claude-vitals/)
+[![Docs](https://img.shields.io/badge/docs-agent--vitals-00d4ff.svg)](https://ametel01.github.io/agent-vitals/)
 
-Continuous quality monitoring for Claude Code. Detect regressions. Prescribe fixes. Self-correct.
+Continuous quality monitoring for Claude Code and Codex CLI. Detect regressions. Prescribe fixes. Self-correct.
 
 ## The Problem
 
-AI coding quality degrades silently. By the time you notice, it's been broken for weeks. [@stellaraccident](https://github.com/stellaraccident) proved this across [234,760 tool calls](https://github.com/anthropics/claude-code/issues/42796) — thinking depth had dropped 67% before anyone noticed, blind edits tripled, and costs spiraled from $12/day to $1,504/day. claude-vitals makes that analysis continuous and automatic.
+AI coding quality degrades silently. By the time you notice, it's been broken for weeks. [@stellaraccident](https://github.com/stellaraccident) proved this across [234,760 tool calls](https://github.com/anthropics/claude-code/issues/42796) — thinking depth had dropped 67% before anyone noticed, blind edits tripled, and costs spiraled from $12/day to $1,504/day. agent-vitals makes that analysis continuous and automatic.
 
 Credit: Built on [@stellaraccident](https://github.com/stellaraccident)'s [analysis of 234,760 tool calls](https://github.com/anthropics/claude-code/issues/42796).
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/Okohedeki/claude-vitals.git
-cd claude-vitals && bun install && bun run build
+git clone https://github.com/ametel01/agent-vitals.git
+cd agent-vitals && bun install && bun run build
 node dist/index.js scan && node dist/index.js health
 ```
 
 Bun is the package manager used for development; the CLI itself still runs on Node (`dist/index.js` uses `#!/usr/bin/env node`), so end users who install the published binary are not required to have Bun installed.
 
+To scan Codex CLI sessions instead of Claude Code sessions:
+
+```bash
+node dist/index.js scan --source codex
+node dist/index.js report --source codex
+node dist/index.js health --source codex
+```
+
 ## What It Does
 
 ### Detect
 
-`claude-vitals scan && claude-vitals health`
+`agent-vitals scan && agent-vitals health`
 Ingests your session logs into SQLite. One-line green/yellow/red health check across all 24 metrics.
+
+Use `--source claude`, `--source codex`, or `--source all` to choose which assistant logs to ingest or inspect. `scan`, `report`, `health`, and `prescribe` default to `all`.
 
 ### Understand
 
-`claude-vitals report` / `claude-vitals compare`
+`agent-vitals report` / `agent-vitals compare`
 Terminal report with sparklines and trend arrows. Side-by-side period comparison to see what changed.
 
 ### Fix
 
-`claude-vitals prescribe --apply`
+`agent-vitals prescribe --apply`
 When metrics degrade, prescribe outputs the exact env vars, `settings.json` changes, and `CLAUDE.md` rules to fix them. `--apply` writes them automatically.
+
+Prescriptions are provider-specific. Claude prescriptions can be applied automatically; Codex prescriptions are dry-run recommendations for `~/.codex/config.toml`, `~/.codex/rules/*.rules`, and project instructions.
 
 ### Self-Correct
 
@@ -218,7 +230,7 @@ Average session duration. **How it's used:** Combined with prompts/session, tell
 When metrics degrade, `prescribe` tells you exactly what to change:
 
 ```
-claude-vitals prescribe
+agent-vitals prescribe
 
   PRESCRIPTIONS
   4 metrics degraded: 2 critical, 2 warning
@@ -232,32 +244,52 @@ claude-vitals prescribe
      CLAUDE.md: Zero tolerance policy for blind edits
 
   TO APPLY:
-    claude-vitals prescribe --apply
+    agent-vitals prescribe --apply
 ```
 
-Use `claude-vitals baseline` to see the recommended settings for every Claude Code user, regardless of current metrics.
+Use `agent-vitals baseline` to see the recommended settings for every Claude Code user, regardless of current metrics.
+
+Codex support currently covers scanning, provider-aware metrics, health checks, terminal reports, Markdown reports, dashboard API filtering, comparisons, impact analysis, and dry-run prescriptions. Claude-calibrated benchmarks for thinking depth, redaction rate, cost, and context pressure are shown as provider-local for Codex instead of being judged against Claude thresholds.
 
 ## Commands
 
-| Command              | Description                                          |
-| -------------------- | ---------------------------------------------------- |
-| `scan`               | Ingest session logs and compute metrics              |
-| `health`             | One-line green/yellow/red status                     |
-| `report`             | Terminal report with sparklines                      |
-| `report --format md` | GitHub-postable markdown report                      |
-| `baseline`           | Show recommended baseline settings for all users     |
-| `baseline --apply`   | Write baseline settings to `~/.claude/settings.json` |
-| `prescribe`          | Output fix recommendations based on degraded metrics |
-| `prescribe --apply`  | Apply fixes automatically                            |
-| `dashboard`          | Web dashboard on localhost:7847                      |
-| `compare <p1> <p2>`  | Side-by-side period comparison                       |
-| `annotate "<desc>"`  | Log a manual change event                            |
-| `impact <id>`        | Before/after analysis for a change                   |
-| `changes`            | List all tracked changes                             |
+| Command                             | Description                                             |
+| ----------------------------------- | ------------------------------------------------------- |
+| `scan`                              | Ingest Claude and Codex session logs                    |
+| `scan --source codex`               | Ingest Codex CLI session logs                           |
+| `scan --source all`                 | Ingest Claude and Codex session logs                    |
+| `health`                            | One-line green/yellow/red status across all sources     |
+| `health --source codex`             | One-line health status for Codex metrics                |
+| `report`                            | Terminal report with sparklines across all sources      |
+| `report --source codex`             | Terminal report filtered to Codex sessions              |
+| `report --format md`                | GitHub-postable markdown report                         |
+| `report --source codex --format md` | Markdown report filtered to Codex sessions              |
+| `baseline`                          | Show recommended baseline settings for Claude users     |
+| `baseline --source codex`           | Explain that Codex baseline settings are unavailable    |
+| `baseline --apply`                  | Write baseline settings to `~/.claude/settings.json`    |
+| `prescribe`                         | Output Claude fix recommendations from degraded metrics |
+| `prescribe --source codex`          | Show dry-run Codex fixes for rules/config/instructions  |
+| `prescribe --apply`                 | Apply Claude fixes automatically                        |
+| `dashboard`                         | Web dashboard on localhost:7847 across all sources      |
+| `dashboard --source codex`          | Open dashboard with Codex as the default source         |
+| `compare <p1> <p2>`                 | Side-by-side period comparison across all sources       |
+| `compare <p1> <p2> --source codex`  | Side-by-side period comparison for Codex metrics        |
+| `annotate "<desc>"`                 | Log a manual change event                               |
+| `annotate "<desc>" --source codex`  | Accept source flag for CLI consistency                  |
+| `impact <id>`                       | Before/after analysis for a change across all sources   |
+| `impact <id> --source codex`        | Before/after analysis for Codex metrics                 |
+| `changes`                           | List all tracked changes                                |
+| `changes --source codex`            | Accept source flag for CLI consistency                  |
+
+Source filters:
+
+- `claude`: Claude Code logs from `~/.claude/projects`.
+- `codex`: Codex CLI rollouts from `~/.codex/state_5.sqlite` or `~/.codex/sessions`.
+- `all`: Aggregate all supported providers in the same database.
 
 ## Documentation
 
-Full docs: [okohedeki.github.io/claude-vitals](https://okohedeki.github.io/claude-vitals/)
+Full docs: [ametel01.github.io/agent-vitals](https://ametel01.github.io/agent-vitals/)
 
 ## Credits
 
