@@ -79,6 +79,30 @@
     .health-badge.yellow { background: rgba(255,204,0,0.15); color: var(--yellow); border: 1px solid rgba(255,204,0,0.3); }
     .health-badge.red    { background: rgba(255,68,68,0.15);  color: var(--red);    border: 1px solid rgba(255,68,68,0.3); }
 
+    .topbar-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .source-select {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-family: inherit;
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .source-select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
     .health-dot {
       width: 8px;
       height: 8px;
@@ -342,6 +366,8 @@
       XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
       ReferenceLine, Legend
     } = Recharts;
+
+    const DEFAULT_SOURCE = '__AGENT_VITALS_DEFAULT_SOURCE__';
 
     // -----------------------------------------------------------------------
     // Constants
@@ -676,6 +702,10 @@
     // -----------------------------------------------------------------------
 
     function App() {
+      const initialSource = (DEFAULT_SOURCE && DEFAULT_SOURCE !== '__AGENT_VITALS_DEFAULT_SOURCE__')
+        ? DEFAULT_SOURCE
+        : 'all';
+      const [source, setSource] = React.useState(initialSource);
       const [metrics, setMetrics] = React.useState([]);
       const [changes, setChanges] = React.useState([]);
       const [health, setHealth] = React.useState(null);
@@ -685,13 +715,19 @@
       const [activeChange, setActiveChange] = React.useState(null);
 
       React.useEffect(() => {
+        let cancelled = false;
+        setLoading(true);
+        setError(null);
+        setActiveChange(null);
+        const qs = `?source=${encodeURIComponent(source || 'all')}`;
         Promise.all([
-          fetch('/api/metrics').then(r => r.json()),
-          fetch('/api/changes').then(r => r.json()),
-          fetch('/api/health').then(r => r.json()),
-          fetch('/api/sessions').then(r => r.json()),
+          fetch(`/api/metrics${qs}`).then(r => r.json()),
+          fetch(`/api/changes${qs}`).then(r => r.json()),
+          fetch(`/api/health${qs}`).then(r => r.json()),
+          fetch(`/api/sessions${qs}`).then(r => r.json()),
         ])
           .then(([m, c, h, s]) => {
+            if (cancelled) return;
             setMetrics(m);
             setChanges(c);
             setHealth(h);
@@ -699,10 +735,12 @@
             setLoading(false);
           })
           .catch(err => {
+            if (cancelled) return;
             setError(err.message);
             setLoading(false);
           });
-      }, []);
+        return () => { cancelled = true; };
+      }, [source]);
 
       if (loading) {
         return (
@@ -737,9 +775,21 @@
           {/* Top Bar */}
           <div className="topbar">
             <div className="topbar-title">AGENT VITALS</div>
-            <div className={`health-badge ${healthStatus}`}>
-              <div className={`health-dot ${healthStatus}`} />
-              {healthStatus === 'green' ? 'Healthy' : healthStatus === 'yellow' ? 'Warning' : 'Critical'}
+            <div className="topbar-controls">
+              <select
+                className="source-select"
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+                aria-label="Source"
+              >
+                <option value="all">All Sources</option>
+                <option value="claude">Claude</option>
+                <option value="codex">Codex</option>
+              </select>
+              <div className={`health-badge ${healthStatus}`}>
+                <div className={`health-dot ${healthStatus}`} />
+                {healthStatus === 'green' ? 'Healthy' : healthStatus === 'yellow' ? 'Warning' : 'Critical'}
+              </div>
             </div>
           </div>
 

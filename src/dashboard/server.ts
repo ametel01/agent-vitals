@@ -50,7 +50,10 @@ export function serveDashboard(db: VitalsDB, port: number, defaultProvider: stri
     try {
       if (pathname === '/' || pathname === '/index.html') {
         const htmlPath = resolveHtmlPath();
-        const html = fs.readFileSync(htmlPath, 'utf-8');
+        const defaultSource = defaultProvider === '_all' ? 'all' : defaultProvider;
+        const html = fs
+          .readFileSync(htmlPath, 'utf-8')
+          .replace('__AGENT_VITALS_DEFAULT_SOURCE__', defaultSource);
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(html);
         return;
