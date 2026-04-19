@@ -222,24 +222,76 @@ program
 // --- baseline ---
 program
   .command('baseline')
-  .description('Show recommended baseline settings for optimal Claude Code quality')
-  .option('--apply', 'Write baseline settings to ~/.claude/settings.json')
+  .description('Show recommended baseline settings for optimal agent quality')
+  .option('--apply', 'Write baseline settings to the appropriate config location')
   .option('--source <source>', 'Filter by source: claude, codex, or all', 'all')
   .option('--db <path>', 'Custom database path')
   .action((opts) => {
     const provider = resolveReportProvider(opts.source);
-    if (provider === 'codex') {
-      console.log(
-        chalk.yellow(
-          'No Codex baseline settings available yet. Claude baseline settings target ~/.claude.',
-        ),
-      );
-      return;
-    }
-
     const db = new VitalsDB(opts.db);
     try {
       const prescriber = new Prescriber(db);
+
+      if (provider === 'codex') {
+        const baselines = prescriber.getCodexBaselineRecommendations();
+
+        console.log(chalk.bold('\n  CODEX BASELINE SETTINGS FOR OPTIMAL QUALITY\n'));
+        console.log(
+          chalk.gray('  These settings should be applied regardless of current metrics.\n'),
+        );
+
+        for (const b of baselines) {
+          const typeColor =
+            b.type === 'codex_rules'
+              ? chalk.yellow
+              : b.type === 'project_instructions'
+                ? chalk.cyan
+                : chalk.magenta;
+          const typeLabel =
+            b.type === 'codex_rules'
+              ? 'codex rule'
+              : b.type === 'project_instructions'
+                ? 'AGENTS.md'
+                : 'config.toml';
+          console.log(`  ${typeColor(typeLabel.padEnd(14))} ${chalk.white(b.key)}`);
+          console.log(`  ${' '.repeat(14)} ${chalk.gray(b.description)}`);
+          console.log(`  ${' '.repeat(14)} ${chalk.gray(String(b.value))}`);
+          console.log('');
+        }
+
+        if (opts.apply) {
+          const fakePrescriptions = baselines.map((b) => ({
+            metric: 'baseline',
+            metricLabel: 'Baseline',
+            currentValue: 0,
+            threshold: 0,
+            severity: 'warning' as const,
+            fix: b,
+          }));
+          const result = prescriber.applyCodex(fakePrescriptions, { target: 'global' });
+          console.log(chalk.green.bold('  APPLIED\n'));
+          if (result.rulesWritten.length > 0) {
+            console.log(
+              chalk.green(`  ✓ Codex rules written (${result.rulesWritten.length} file(s)):`),
+            );
+            for (const p of result.rulesWritten) console.log(chalk.gray(`    ${p}`));
+          }
+          if (result.configTomlWritten) {
+            console.log(chalk.green(`  ✓ Codex config written to ${result.configTomlPath}`));
+          }
+          if (result.agentsMdWritten) {
+            console.log(chalk.green(`  ✓ Project instructions written to ${result.agentsMdPath}`));
+            console.log(chalk.gray(`    ${result.agentsMdRulesCount} rule(s)`));
+          }
+          console.log('');
+        } else {
+          console.log(chalk.gray('  TO APPLY:'));
+          console.log(chalk.white('    agent-vitals baseline --source codex --apply'));
+          console.log('');
+        }
+        return;
+      }
+
       const baselines = prescriber.getBaselineRecommendations();
 
       console.log(chalk.bold('\n  BASELINE SETTINGS FOR OPTIMAL QUALITY\n'));
@@ -286,6 +338,7 @@ program
       } else {
         console.log(chalk.gray('  TO APPLY:'));
         console.log(chalk.white('    agent-vitals baseline --apply'));
+        console.log(chalk.white('    agent-vitals baseline --source codex --apply'));
         console.log('');
       }
     } finally {
