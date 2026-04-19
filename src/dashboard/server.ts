@@ -22,6 +22,16 @@ function resolveDateParam(date: string | null): string | undefined {
   return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : undefined;
 }
 
+function parseJsonObject(value: string | null): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 function resolveHtmlPath(): string {
   // First try next to the compiled JS (dist/dashboard/dashboard.html)
   const nextToCompiled = path.join(__dirname, 'dashboard.html');
@@ -91,6 +101,19 @@ export function serveDashboard(db: VitalsDB, port: number, defaultProvider: stri
         const health = detector.getHealthStatus();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(health));
+        return;
+      }
+
+      if (pathname === '/api/prescriptions/latest') {
+        const latest = db.getLatestPrescribeApplies();
+        const data = Object.fromEntries(
+          Object.entries(latest).map(([key, value]) => [
+            key,
+            value ? { ...value, details: parseJsonObject(value.content_snapshot) } : null,
+          ]),
+        );
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
         return;
       }
 
