@@ -102,9 +102,10 @@ CREATE TABLE IF NOT EXISTS daily_metrics (
   metric_name TEXT NOT NULL,
   metric_value REAL,
   metric_detail TEXT,          -- JSON for breakdowns
+  provider TEXT NOT NULL DEFAULT '_all',  -- claude, codex, or _all (aggregate)
   model TEXT,                  -- for model segmentation
   project_path TEXT,
-  UNIQUE(date, metric_name, model, project_path)
+  UNIQUE(date, metric_name, provider, model, project_path)
 );
 
 -- User prompts (extracted for sentiment/frustration analysis)

@@ -53,10 +53,46 @@ export class VitalsDB {
     this.addColumnIfMissing('sessions', 'source_mtime_ms', 'INTEGER');
     this.addColumnIfMissing('sessions', 'source_size_bytes', 'INTEGER');
     this.addColumnIfMissing('sessions', 'provider', "TEXT NOT NULL DEFAULT 'claude'");
+    this.migrateDailyMetricsProvider();
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_tool_calls_call_id ON tool_calls(tool_call_id);');
     this.db.exec(
       'CREATE INDEX IF NOT EXISTS idx_tool_results_use_id ON tool_results(tool_use_id);',
     );
+    this.db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_daily_metrics_provider ON daily_metrics(provider);',
+    );
+  }
+
+  private migrateDailyMetricsProvider() {
+    const cols = this.db.prepare('PRAGMA table_info(daily_metrics)').all() as Array<{
+      name: string;
+    }>;
+    if (cols.some((c) => c.name === 'provider')) return;
+
+    // UNIQUE(date, metric_name, provider, model, project_path) is a table constraint
+    // in SQLite, so adding a column is not enough — rebuild the table and port rows.
+    this.db.exec(`
+      BEGIN;
+      ALTER TABLE daily_metrics RENAME TO daily_metrics_old;
+      CREATE TABLE daily_metrics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL,
+        metric_name TEXT NOT NULL,
+        metric_value REAL,
+        metric_detail TEXT,
+        provider TEXT NOT NULL DEFAULT '_all',
+        model TEXT,
+        project_path TEXT,
+        UNIQUE(date, metric_name, provider, model, project_path)
+      );
+      INSERT INTO daily_metrics (date, metric_name, metric_value, metric_detail, provider, model, project_path)
+      SELECT date, metric_name, metric_value, metric_detail, '_all', model, project_path
+      FROM daily_metrics_old;
+      DROP TABLE daily_metrics_old;
+      CREATE INDEX IF NOT EXISTS idx_daily_metrics_date ON daily_metrics(date);
+      CREATE INDEX IF NOT EXISTS idx_daily_metrics_name ON daily_metrics(metric_name);
+      COMMIT;
+    `);
   }
 
   private addColumnIfMissing(table: string, column: string, typeDecl: string) {
@@ -420,18 +456,20 @@ export class VitalsDB {
     metric_name: string;
     metric_value: number;
     metric_detail?: string;
+    provider?: string;
     model?: string;
     project_path?: string;
   }) {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO daily_metrics (date, metric_name, metric_value, metric_detail, model, project_path)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO daily_metrics (date, metric_name, metric_value, metric_detail, provider, model, project_path)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run(
       dm.date,
       dm.metric_name,
       dm.metric_value,
       dm.metric_detail || null,
+      dm.provider || '_all',
       dm.model || '_all',
       dm.project_path || '_all',
     );
@@ -492,9 +530,12 @@ export class VitalsDB {
     days: number = 30,
     model?: string,
     project?: string,
+    provider?: string,
   ): DailyMetricRow[] {
     let sql = `SELECT date, metric_value as value, metric_detail as detail FROM daily_metrics WHERE metric_name = ? AND date >= date('now', ?)`;
     const params: SqlParam[] = [metricName, `-${days} days`];
+    sql += ' AND provider = ?';
+    params.push(provider || '_all');
     if (model) {
       sql += ' AND model = ?';
       params.push(model);
@@ -513,28 +554,34 @@ export class VitalsDB {
     return this.db.prepare(sql).all(...params) as DailyMetricRow[];
   }
 
-  getMetricForDateRange(metricName: string, startDate: string, endDate: string): DateValueRow[] {
+  getMetricForDateRange(
+    metricName: string,
+    startDate: string,
+    endDate: string,
+    provider: string = '_all',
+  ): DateValueRow[] {
     return this.db
       .prepare(
         `
       SELECT date, metric_value as value FROM daily_metrics
-      WHERE metric_name = ? AND date >= ? AND date <= ? AND model = '_all' AND project_path = '_all'
+      WHERE metric_name = ? AND date >= ? AND date <= ?
+        AND provider = ? AND model = '_all' AND project_path = '_all'
       ORDER BY date ASC
     `,
       )
-      .all(metricName, startDate, endDate) as DateValueRow[];
+      .all(metricName, startDate, endDate, provider) as DateValueRow[];
   }
 
-  getLatestMetric(metricName: string): LatestMetricRow | undefined {
+  getLatestMetric(metricName: string, provider: string = '_all'): LatestMetricRow | undefined {
     return this.db
       .prepare(
         `
       SELECT date, metric_value as value FROM daily_metrics
-      WHERE metric_name = ? AND model = '_all' AND project_path = '_all'
+      WHERE metric_name = ? AND provider = ? AND model = '_all' AND project_path = '_all'
       ORDER BY date DESC LIMIT 1
     `,
       )
-      .get(metricName) as LatestMetricRow | undefined;
+      .get(metricName, provider) as LatestMetricRow | undefined;
   }
 
   getAllChanges(): ChangeRow[] {
@@ -551,18 +598,45 @@ export class VitalsDB {
       .all(changeId) as ImpactResultRow[];
   }
 
-  getSessionCount(): number {
-    return (this.db.prepare('SELECT COUNT(*) as c FROM sessions').get() as CountRow).c;
+  getSessionCount(provider: string = '_all'): number {
+    if (provider === '_all') {
+      return (this.db.prepare('SELECT COUNT(*) as c FROM sessions').get() as CountRow).c;
+    }
+    return (
+      this.db
+        .prepare('SELECT COUNT(*) as c FROM sessions WHERE provider = ?')
+        .get(provider) as CountRow
+    ).c;
   }
 
-  getToolCallCount(): number {
-    return (this.db.prepare('SELECT COUNT(*) as c FROM tool_calls').get() as CountRow).c;
+  getToolCallCount(provider: string = '_all'): number {
+    if (provider === '_all') {
+      return (this.db.prepare('SELECT COUNT(*) as c FROM tool_calls').get() as CountRow).c;
+    }
+    return (
+      this.db
+        .prepare(
+          `
+          SELECT COUNT(*) as c
+          FROM tool_calls tc
+          JOIN sessions s ON tc.session_id = s.id
+          WHERE s.provider = ?
+          `,
+        )
+        .get(provider) as CountRow
+    ).c;
   }
 
-  getDateRange(): DateRangeRow | undefined {
-    return this.db.prepare('SELECT MIN(date) as min, MAX(date) as max FROM daily_metrics').get() as
-      | DateRangeRow
-      | undefined;
+  getDateRange(provider: string = '_all'): DateRangeRow | undefined {
+    return this.db
+      .prepare(
+        `
+        SELECT MIN(date) as min, MAX(date) as max
+        FROM daily_metrics
+        WHERE provider = ? AND model = '_all' AND project_path = '_all'
+        `,
+      )
+      .get(provider) as DateRangeRow | undefined;
   }
 
   getAllMetricNames(): string[] {
@@ -573,17 +647,31 @@ export class VitalsDB {
     ).map((r) => r.metric_name);
   }
 
-  getAllDailyMetricsForDashboard(days: number = 90): DashboardMetricRow[] {
+  getAllDailyMetricsForDashboard(
+    days: number = 90,
+    provider: string = '_all',
+  ): DashboardMetricRow[] {
     return this.db
       .prepare(
         `
       SELECT date, metric_name, metric_value as value, metric_detail as detail
       FROM daily_metrics
-      WHERE date >= date('now', ?) AND model = '_all' AND project_path = '_all'
+      WHERE date >= date('now', ?)
+        AND provider = ? AND model = '_all' AND project_path = '_all'
       ORDER BY date ASC, metric_name ASC
     `,
       )
-      .all(`-${days} days`) as DashboardMetricRow[];
+      .all(`-${days} days`, provider) as DashboardMetricRow[];
+  }
+
+  getProvidersInSessions(): string[] {
+    return (
+      this.db
+        .prepare(
+          "SELECT DISTINCT provider FROM sessions WHERE provider IS NOT NULL AND provider != ''",
+        )
+        .all() as Array<{ provider: string }>
+    ).map((r) => r.provider);
   }
 
   close() {
