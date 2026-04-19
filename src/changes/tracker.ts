@@ -53,12 +53,16 @@ export class ChangeTracker {
   // detectChanges — scan config files and record any that have changed
   // ---------------------------------------------------------------------------
 
-  detectChanges(): number {
+  detectChanges(provider: 'claude' | 'codex' | 'all' = 'claude'): number {
+    let count = 0;
+    if (provider === 'claude' || provider === 'all') count += this.detectClaudeChanges();
+    if (provider === 'codex' || provider === 'all') count += this.detectCodexChanges();
+    return count;
+  }
+
+  private detectClaudeChanges(): number {
     const homeDir = os.homedir();
     const claudeDir = path.join(homeDir, '.claude');
-    let changesDetected = 0;
-
-    // Gather all file paths to check
     const filesToCheck: string[] = [];
 
     // 1. ~/.claude/CLAUDE.md
@@ -89,7 +93,50 @@ export class ChangeTracker {
       this.collectMdFiles(commandsDir, filesToCheck);
     }
 
-    // Process each file
+    return this.processFiles(filesToCheck, 'claude');
+  }
+
+  private detectCodexChanges(): number {
+    const homeDir = os.homedir();
+    const codexDir = path.join(homeDir, '.codex');
+    const cwd = process.cwd();
+    const filesToCheck: string[] = [];
+
+    // 1. ~/.codex/config.toml
+    filesToCheck.push(path.join(codexDir, 'config.toml'));
+
+    // 2. ~/.codex/rules/**/*.rules
+    const rulesDir = path.join(codexDir, 'rules');
+    if (this.isDirectory(rulesDir)) {
+      this.collectFilesWithExt(rulesDir, '.rules', filesToCheck);
+    }
+
+    // 3. ~/.codex/skills/**/SKILL.md
+    const skillsDir = path.join(codexDir, 'skills');
+    if (this.isDirectory(skillsDir)) {
+      this.collectFilesByName(skillsDir, 'SKILL.md', filesToCheck);
+    }
+
+    // 4. Project AGENTS.md
+    filesToCheck.push(path.join(cwd, 'AGENTS.md'));
+
+    // 5. Project .codex — markdown, toml, rules files
+    const projectCodexDir = path.join(cwd, '.codex');
+    if (this.isDirectory(projectCodexDir)) {
+      this.collectFilesByExts(projectCodexDir, ['.md', '.toml', '.rules'], filesToCheck);
+    }
+
+    // 6. Project .agents — markdown files
+    const projectAgentsDir = path.join(cwd, '.agents');
+    if (this.isDirectory(projectAgentsDir)) {
+      this.collectMdFiles(projectAgentsDir, filesToCheck);
+    }
+
+    return this.processFiles(filesToCheck, 'codex');
+  }
+
+  private processFiles(filesToCheck: string[], provider: 'claude' | 'codex'): number {
+    let changesDetected = 0;
     for (const filePath of filesToCheck) {
       if (!this.fileExists(filePath)) continue;
 
@@ -98,7 +145,7 @@ export class ChangeTracker {
         const hash = crypto.createHash('sha256').update(content).digest('hex');
 
         // Check if we already have this exact hash stored for this file
-        const lastHash = this.getLastStoredHash(filePath);
+        const lastHash = this.getLastStoredHash(filePath, provider);
         if (lastHash === hash) continue;
 
         // Content changed (or first time seeing this file) — record it
@@ -116,6 +163,7 @@ export class ChangeTracker {
           file_hash: hash,
           content_snapshot: snapshot,
           word_count: wordCount,
+          provider,
         });
 
         changesDetected++;
@@ -123,7 +171,6 @@ export class ChangeTracker {
         // File unreadable — skip gracefully
       }
     }
-
     return changesDetected;
   }
 
@@ -246,10 +293,12 @@ export class ChangeTracker {
   // Private helpers
   // ---------------------------------------------------------------------------
 
-  private getLastStoredHash(filePath: string): string | null {
+  private getLastStoredHash(filePath: string, provider: 'claude' | 'codex'): string | null {
     const row = this.db.db
-      .prepare('SELECT file_hash FROM changes WHERE file_path = ? ORDER BY timestamp DESC LIMIT 1')
-      .get(filePath) as { file_hash: string } | undefined;
+      .prepare(
+        'SELECT file_hash FROM changes WHERE file_path = ? AND provider = ? ORDER BY timestamp DESC LIMIT 1',
+      )
+      .get(filePath, provider) as { file_hash: string } | undefined;
     return row?.file_hash ?? null;
   }
 
@@ -269,16 +318,58 @@ export class ChangeTracker {
     }
   }
 
+  /** Directory names to skip during recursive walks. */
+  private static readonly SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build']);
+
   /** Recursively collect all .md files under a directory. */
   private collectMdFiles(dir: string, out: string[]): void {
+    this.collectFilesWithExt(dir, '.md', out);
+  }
+
+  /** Recursively collect files with a specific extension. */
+  private collectFilesWithExt(dir: string, ext: string, out: string[]): void {
     try {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name);
         if (entry.isDirectory()) {
-          this.collectMdFiles(fullPath, out);
-        } else if (entry.isFile() && entry.name.endsWith('.md')) {
-          out.push(fullPath);
+          if (ChangeTracker.SKIP_DIRS.has(entry.name)) continue;
+          this.collectFilesWithExt(path.join(dir, entry.name), ext, out);
+        } else if (entry.isFile() && entry.name.endsWith(ext)) {
+          out.push(path.join(dir, entry.name));
+        }
+      }
+    } catch {
+      // Not readable — skip
+    }
+  }
+
+  /** Recursively collect files matching any of the given extensions. */
+  private collectFilesByExts(dir: string, exts: string[], out: string[]): void {
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          if (ChangeTracker.SKIP_DIRS.has(entry.name)) continue;
+          this.collectFilesByExts(path.join(dir, entry.name), exts, out);
+        } else if (entry.isFile() && exts.some((ext) => entry.name.endsWith(ext))) {
+          out.push(path.join(dir, entry.name));
+        }
+      }
+    } catch {
+      // Not readable — skip
+    }
+  }
+
+  /** Recursively collect files matching an exact basename. */
+  private collectFilesByName(dir: string, name: string, out: string[]): void {
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          if (ChangeTracker.SKIP_DIRS.has(entry.name)) continue;
+          this.collectFilesByName(path.join(dir, entry.name), name, out);
+        } else if (entry.isFile() && entry.name === name) {
+          out.push(path.join(dir, entry.name));
         }
       }
     } catch {

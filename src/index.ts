@@ -68,7 +68,8 @@ program
       // Detect config changes
       console.log(chalk.bold('\nChecking for config changes...'));
       const tracker = new ChangeTracker(db);
-      const changes = tracker.detectChanges();
+      const trackerSource = source as 'claude' | 'codex' | 'all';
+      const changes = tracker.detectChanges(trackerSource);
       if (changes > 0) {
         console.log(chalk.green(`  Detected ${changes} config change(s)`));
       } else {
