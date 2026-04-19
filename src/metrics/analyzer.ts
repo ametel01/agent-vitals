@@ -35,61 +35,82 @@ function isFirstToolCategory(category: string): category is FirstToolCategory {
   return ['read', 'edit', 'search', 'bash', 'write', 'agent'].includes(category);
 }
 
+/**
+ * Build the `JOIN sessions` / provider filter clauses used by every metric
+ * query. When `provider === '_all'` this returns empty strings so the query
+ * behaves exactly as before provider segmentation existed.
+ */
+function providerClauses(
+  provider: string,
+  alias: string,
+): { join: string; where: string; params: string[] } {
+  if (provider === '_all') return { join: '', where: '', params: [] };
+  return {
+    join: ` JOIN sessions s_prov ON ${alias}.session_id = s_prov.id`,
+    where: ' AND s_prov.provider = ?',
+    params: [provider],
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Main analyser class
 // ---------------------------------------------------------------------------
 
 export class MetricsAnalyzer {
   /**
-   * Compute all 20 quality metrics for every day that has data, storing each
-   * via `db.upsertDailyMetric`.  Model-segmented versions are computed for
-   * metrics 1-4.
+   * Compute all quality metrics for every day that has data. Metrics are
+   * emitted once with provider `_all` (aggregate) and once per distinct
+   * provider detected in the sessions table.
    */
   computeAll(db: VitalsDB): void {
-    const raw = db.db; // raw better-sqlite3 handle
+    const raw = db.db;
+    const providers = ['_all', ...db.getProvidersInSessions()];
 
-    this.computeThinkingDepthMedian(db, raw);
-    this.computeThinkingDepthRedactedPct(db, raw);
-    this.computeReadEditRatio(db, raw);
-    this.computeResearchMutationRatio(db, raw);
-    this.computeBlindEditRate(db, raw);
-    this.computeWriteVsEditPct(db, raw);
-    this.computeFirstToolReadPct(db, raw);
-    this.computeReasoningLoopsPer1k(db, raw);
-    this.computeLazinessTotal(db, raw);
-    this.computeSelfAdmittedFailuresPer1k(db, raw);
-    this.computeUserInterruptsPer1k(db, raw);
-    this.computeSentimentRatio(db, raw);
-    this.computeFrustrationRate(db, raw);
-    this.computeSessionAutonomyMedian(db, raw);
-    this.computeEditChurnRate(db, raw);
-    this.computeBashSuccessRate(db, raw);
-    this.computeSubagentPct(db, raw);
-    this.computeContextPressure(db, raw);
-    this.computeCostEstimate(db, raw);
-    this.computePromptsPerSession(db, raw);
+    for (const provider of providers) {
+      this.computeThinkingDepthMedian(db, raw, provider);
+      this.computeThinkingDepthRedactedPct(db, raw, provider);
+      this.computeReadEditRatio(db, raw, provider);
+      this.computeResearchMutationRatio(db, raw, provider);
+      this.computeBlindEditRate(db, raw, provider);
+      this.computeWriteVsEditPct(db, raw, provider);
+      this.computeFirstToolReadPct(db, raw, provider);
+      this.computeReasoningLoopsPer1k(db, raw, provider);
+      this.computeLazinessTotal(db, raw, provider);
+      this.computeSelfAdmittedFailuresPer1k(db, raw, provider);
+      this.computeUserInterruptsPer1k(db, raw, provider);
+      this.computeSentimentRatio(db, raw, provider);
+      this.computeFrustrationRate(db, raw, provider);
+      this.computeSessionAutonomyMedian(db, raw, provider);
+      this.computeEditChurnRate(db, raw, provider);
+      this.computeBashSuccessRate(db, raw, provider);
+      this.computeSubagentPct(db, raw, provider);
+      this.computeContextPressure(db, raw, provider);
+      this.computeCostEstimate(db, raw, provider);
+      this.computePromptsPerSession(db, raw, provider);
 
-    // Extended metrics (v1.1)
-    this.computeTimeOfDayQuality(db, raw);
-    this.computeToolDiversity(db, raw);
-    this.computeTokenEfficiency(db, raw);
-    this.computeSessionLength(db, raw);
+      // Extended metrics (v1.1)
+      this.computeTimeOfDayQuality(db, raw, provider);
+      this.computeToolDiversity(db, raw, provider);
+      this.computeTokenEfficiency(db, raw, provider);
+      this.computeSessionLength(db, raw, provider);
+    }
   }
 
   // -----------------------------------------------------------------------
   // 1. thinking_depth_median
   // -----------------------------------------------------------------------
-  private computeThinkingDepthMedian(db: VitalsDB, raw: Database.Database): void {
+  private computeThinkingDepthMedian(db: VitalsDB, raw: Database.Database, provider: string): void {
+    const pc = providerClauses(provider, 'tb');
     const rows = raw
       .prepare(
         `
-      SELECT ${dateExpr} AS day, estimated_depth
-      FROM thinking_blocks
-      WHERE timestamp IS NOT NULL
+      SELECT substr(tb.timestamp, 1, 10) AS day, tb.estimated_depth
+      FROM thinking_blocks tb${pc.join}
+      WHERE tb.timestamp IS NOT NULL${pc.where}
       ORDER BY day
     `,
       )
-      .all() as { day: string; estimated_depth: number }[];
+      .all(...pc.params) as { day: string; estimated_depth: number }[];
 
     const byDay = this.groupBy(rows, 'day');
     for (const [day, items] of Object.entries(byDay)) {
@@ -98,21 +119,24 @@ export class MetricsAnalyzer {
         date: day,
         metric_name: 'thinking_depth_median',
         metric_value: median(depths),
+        provider,
       });
     }
 
     // model-segmented
+    const modelProviderWhere = provider === '_all' ? '' : ' AND s.provider = ?';
+    const modelParams = provider === '_all' ? [] : [provider];
     const rowsM = raw
       .prepare(
         `
       SELECT ${dateExpr} AS day, tb.estimated_depth, s.model
       FROM thinking_blocks tb
       JOIN sessions s ON tb.session_id = s.id
-      WHERE tb.timestamp IS NOT NULL AND s.model IS NOT NULL
+      WHERE tb.timestamp IS NOT NULL AND s.model IS NOT NULL${modelProviderWhere}
       ORDER BY day
     `,
       )
-      .all() as { day: string; estimated_depth: number; model: string }[];
+      .all(...modelParams) as { day: string; estimated_depth: number; model: string }[];
 
     const byDayModel = this.groupBy2(rowsM, 'day', 'model');
     for (const [key, items] of Object.entries(byDayModel)) {
@@ -122,6 +146,7 @@ export class MetricsAnalyzer {
         date: day,
         metric_name: 'thinking_depth_median',
         metric_value: median(depths),
+        provider,
         model,
       });
     }
@@ -130,29 +155,37 @@ export class MetricsAnalyzer {
   // -----------------------------------------------------------------------
   // 2. thinking_depth_redacted_pct
   // -----------------------------------------------------------------------
-  private computeThinkingDepthRedactedPct(db: VitalsDB, raw: Database.Database): void {
+  private computeThinkingDepthRedactedPct(
+    db: VitalsDB,
+    raw: Database.Database,
+    provider: string,
+  ): void {
+    const pc = providerClauses(provider, 'tb');
     const rows = raw
       .prepare(
         `
-      SELECT ${dateExpr} AS day,
+      SELECT substr(tb.timestamp, 1, 10) AS day,
              COUNT(*) AS total,
-             SUM(CASE WHEN is_redacted = 1 THEN 1 ELSE 0 END) AS redacted
-      FROM thinking_blocks
-      WHERE timestamp IS NOT NULL
+             SUM(CASE WHEN tb.is_redacted = 1 THEN 1 ELSE 0 END) AS redacted
+      FROM thinking_blocks tb${pc.join}
+      WHERE tb.timestamp IS NOT NULL${pc.where}
       GROUP BY day
     `,
       )
-      .all() as { day: string; total: number; redacted: number }[];
+      .all(...pc.params) as { day: string; total: number; redacted: number }[];
 
     for (const r of rows) {
       db.upsertDailyMetric({
         date: r.day,
         metric_name: 'thinking_depth_redacted_pct',
         metric_value: safeDivide(r.redacted, r.total) * 100,
+        provider,
       });
     }
 
     // model-segmented
+    const modelProviderWhere = provider === '_all' ? '' : ' AND s.provider = ?';
+    const modelParams = provider === '_all' ? [] : [provider];
     const rowsM = raw
       .prepare(
         `
@@ -161,17 +194,18 @@ export class MetricsAnalyzer {
              SUM(CASE WHEN tb.is_redacted = 1 THEN 1 ELSE 0 END) AS redacted
       FROM thinking_blocks tb
       JOIN sessions s ON tb.session_id = s.id
-      WHERE tb.timestamp IS NOT NULL AND s.model IS NOT NULL
+      WHERE tb.timestamp IS NOT NULL AND s.model IS NOT NULL${modelProviderWhere}
       GROUP BY day, s.model
     `,
       )
-      .all() as { day: string; model: string; total: number; redacted: number }[];
+      .all(...modelParams) as { day: string; model: string; total: number; redacted: number }[];
 
     for (const r of rowsM) {
       db.upsertDailyMetric({
         date: r.day,
         metric_name: 'thinking_depth_redacted_pct',
         metric_value: safeDivide(r.redacted, r.total) * 100,
+        provider,
         model: r.model,
       });
     }
@@ -180,26 +214,34 @@ export class MetricsAnalyzer {
   // -----------------------------------------------------------------------
   // 3. read_edit_ratio
   // -----------------------------------------------------------------------
-  private computeReadEditRatio(db: VitalsDB, raw: Database.Database): void {
+  private computeReadEditRatio(db: VitalsDB, raw: Database.Database, provider: string): void {
+    const pc = providerClauses(provider, 'tc');
     const rows = raw
       .prepare(
         `
-      SELECT ${dateExpr} AS day,
-             SUM(CASE WHEN category = 'read' THEN 1 ELSE 0 END) AS reads,
-             SUM(CASE WHEN category = 'edit' THEN 1 ELSE 0 END) AS edits
-      FROM tool_calls
-      WHERE timestamp IS NOT NULL
+      SELECT substr(tc.timestamp, 1, 10) AS day,
+             SUM(CASE WHEN tc.category = 'read' THEN 1 ELSE 0 END) AS reads,
+             SUM(CASE WHEN tc.category = 'edit' THEN 1 ELSE 0 END) AS edits
+      FROM tool_calls tc${pc.join}
+      WHERE tc.timestamp IS NOT NULL${pc.where}
       GROUP BY day
     `,
       )
-      .all() as { day: string; reads: number; edits: number }[];
+      .all(...pc.params) as { day: string; reads: number; edits: number }[];
 
     for (const r of rows) {
       const value = r.edits === 0 ? r.reads : r.reads / r.edits;
-      db.upsertDailyMetric({ date: r.day, metric_name: 'read_edit_ratio', metric_value: value });
+      db.upsertDailyMetric({
+        date: r.day,
+        metric_name: 'read_edit_ratio',
+        metric_value: value,
+        provider,
+      });
     }
 
     // model-segmented
+    const modelProviderWhere = provider === '_all' ? '' : ' AND s.provider = ?';
+    const modelParams = provider === '_all' ? [] : [provider];
     const rowsM = raw
       .prepare(
         `
@@ -208,11 +250,11 @@ export class MetricsAnalyzer {
              SUM(CASE WHEN tc.category = 'edit' THEN 1 ELSE 0 END) AS edits
       FROM tool_calls tc
       JOIN sessions s ON tc.session_id = s.id
-      WHERE tc.timestamp IS NOT NULL AND s.model IS NOT NULL
+      WHERE tc.timestamp IS NOT NULL AND s.model IS NOT NULL${modelProviderWhere}
       GROUP BY day, s.model
     `,
       )
-      .all() as { day: string; model: string; reads: number; edits: number }[];
+      .all(...modelParams) as { day: string; model: string; reads: number; edits: number }[];
 
     for (const r of rowsM) {
       const value = r.edits === 0 ? r.reads : r.reads / r.edits;
@@ -220,6 +262,7 @@ export class MetricsAnalyzer {
         date: r.day,
         metric_name: 'read_edit_ratio',
         metric_value: value,
+        provider,
         model: r.model,
       });
     }
@@ -228,19 +271,24 @@ export class MetricsAnalyzer {
   // -----------------------------------------------------------------------
   // 4. research_mutation_ratio
   // -----------------------------------------------------------------------
-  private computeResearchMutationRatio(db: VitalsDB, raw: Database.Database): void {
+  private computeResearchMutationRatio(
+    db: VitalsDB,
+    raw: Database.Database,
+    provider: string,
+  ): void {
+    const pc = providerClauses(provider, 'tc');
     const rows = raw
       .prepare(
         `
-      SELECT ${dateExpr} AS day,
-             SUM(CASE WHEN is_research = 1 THEN 1 ELSE 0 END) AS research,
-             SUM(CASE WHEN is_mutation = 1 THEN 1 ELSE 0 END) AS mutations
-      FROM tool_calls
-      WHERE timestamp IS NOT NULL
+      SELECT substr(tc.timestamp, 1, 10) AS day,
+             SUM(CASE WHEN tc.is_research = 1 THEN 1 ELSE 0 END) AS research,
+             SUM(CASE WHEN tc.is_mutation = 1 THEN 1 ELSE 0 END) AS mutations
+      FROM tool_calls tc${pc.join}
+      WHERE tc.timestamp IS NOT NULL${pc.where}
       GROUP BY day
     `,
       )
-      .all() as { day: string; research: number; mutations: number }[];
+      .all(...pc.params) as { day: string; research: number; mutations: number }[];
 
     for (const r of rows) {
       const value = r.mutations === 0 ? r.research : r.research / r.mutations;
@@ -248,10 +296,13 @@ export class MetricsAnalyzer {
         date: r.day,
         metric_name: 'research_mutation_ratio',
         metric_value: value,
+        provider,
       });
     }
 
     // model-segmented
+    const modelProviderWhere = provider === '_all' ? '' : ' AND s.provider = ?';
+    const modelParams = provider === '_all' ? [] : [provider];
     const rowsM = raw
       .prepare(
         `
@@ -260,11 +311,11 @@ export class MetricsAnalyzer {
              SUM(CASE WHEN tc.is_mutation = 1 THEN 1 ELSE 0 END) AS mutations
       FROM tool_calls tc
       JOIN sessions s ON tc.session_id = s.id
-      WHERE tc.timestamp IS NOT NULL AND s.model IS NOT NULL
+      WHERE tc.timestamp IS NOT NULL AND s.model IS NOT NULL${modelProviderWhere}
       GROUP BY day, s.model
     `,
       )
-      .all() as { day: string; model: string; research: number; mutations: number }[];
+      .all(...modelParams) as { day: string; model: string; research: number; mutations: number }[];
 
     for (const r of rowsM) {
       const value = r.mutations === 0 ? r.research : r.research / r.mutations;
@@ -272,6 +323,7 @@ export class MetricsAnalyzer {
         date: r.day,
         metric_name: 'research_mutation_ratio',
         metric_value: value,
+        provider,
         model: r.model,
       });
     }
@@ -280,18 +332,19 @@ export class MetricsAnalyzer {
   // -----------------------------------------------------------------------
   // 5. blind_edit_rate
   // -----------------------------------------------------------------------
-  private computeBlindEditRate(db: VitalsDB, raw: Database.Database): void {
-    // Get all edit tool calls with their session, sequence_num, target_file, and day
+  private computeBlindEditRate(db: VitalsDB, raw: Database.Database, provider: string): void {
+    const pc = providerClauses(provider, 'tc');
     const edits = raw
       .prepare(
         `
-      SELECT id, session_id, sequence_num, target_file, ${dateExpr} AS day
-      FROM tool_calls
-      WHERE category = 'edit' AND timestamp IS NOT NULL AND target_file IS NOT NULL
-      ORDER BY session_id, sequence_num
+      SELECT tc.id, tc.session_id, tc.sequence_num, tc.target_file,
+             substr(tc.timestamp, 1, 10) AS day
+      FROM tool_calls tc${pc.join}
+      WHERE tc.category = 'edit' AND tc.timestamp IS NOT NULL AND tc.target_file IS NOT NULL${pc.where}
+      ORDER BY tc.session_id, tc.sequence_num
     `,
       )
-      .all() as {
+      .all(...pc.params) as {
       id: number;
       session_id: string;
       sequence_num: number;
@@ -299,7 +352,6 @@ export class MetricsAnalyzer {
       day: string;
     }[];
 
-    // For each edit, check the preceding 10 tool calls in that session
     const lookbackStmt = raw.prepare(`
       SELECT target_file FROM tool_calls
       WHERE session_id = ?
@@ -331,6 +383,7 @@ export class MetricsAnalyzer {
         date: day,
         metric_name: 'blind_edit_rate',
         metric_value: safeDivide(stats.blind, stats.total) * 100,
+        provider,
       });
     }
   }
@@ -338,19 +391,20 @@ export class MetricsAnalyzer {
   // -----------------------------------------------------------------------
   // 6. write_vs_edit_pct
   // -----------------------------------------------------------------------
-  private computeWriteVsEditPct(db: VitalsDB, raw: Database.Database): void {
+  private computeWriteVsEditPct(db: VitalsDB, raw: Database.Database, provider: string): void {
+    const pc = providerClauses(provider, 'tc');
     const rows = raw
       .prepare(
         `
-      SELECT ${dateExpr} AS day,
-             SUM(CASE WHEN category = 'write' THEN 1 ELSE 0 END) AS writes,
-             SUM(CASE WHEN category = 'edit' THEN 1 ELSE 0 END) AS edits
-      FROM tool_calls
-      WHERE timestamp IS NOT NULL AND category IN ('write', 'edit')
+      SELECT substr(tc.timestamp, 1, 10) AS day,
+             SUM(CASE WHEN tc.category = 'write' THEN 1 ELSE 0 END) AS writes,
+             SUM(CASE WHEN tc.category = 'edit' THEN 1 ELSE 0 END) AS edits
+      FROM tool_calls tc${pc.join}
+      WHERE tc.timestamp IS NOT NULL AND tc.category IN ('write', 'edit')${pc.where}
       GROUP BY day
     `,
       )
-      .all() as { day: string; writes: number; edits: number }[];
+      .all(...pc.params) as { day: string; writes: number; edits: number }[];
 
     for (const r of rows) {
       const total = r.writes + r.edits;
@@ -358,6 +412,7 @@ export class MetricsAnalyzer {
         date: r.day,
         metric_name: 'write_vs_edit_pct',
         metric_value: safeDivide(r.writes, total) * 100,
+        provider,
       });
     }
   }
@@ -365,18 +420,18 @@ export class MetricsAnalyzer {
   // -----------------------------------------------------------------------
   // 7. first_tool_read_pct
   // -----------------------------------------------------------------------
-  private computeFirstToolReadPct(db: VitalsDB, raw: Database.Database): void {
-    // For each user prompt, find the first tool call that comes after it (same session, timestamp >=)
+  private computeFirstToolReadPct(db: VitalsDB, raw: Database.Database, provider: string): void {
+    const pc = providerClauses(provider, 'up');
     const prompts = raw
       .prepare(
         `
-      SELECT session_id, timestamp, ${dateExpr} AS day
-      FROM user_prompts
-      WHERE timestamp IS NOT NULL
+      SELECT up.session_id, up.timestamp, substr(up.timestamp, 1, 10) AS day
+      FROM user_prompts up${pc.join}
+      WHERE up.timestamp IS NOT NULL${pc.where}
       ORDER BY day
     `,
       )
-      .all() as { session_id: string; timestamp: string; day: string }[];
+      .all(...pc.params) as { session_id: string; timestamp: string; day: string }[];
 
     const firstToolStmt = raw.prepare(`
       SELECT category FROM tool_calls
@@ -415,6 +470,7 @@ export class MetricsAnalyzer {
         metric_name: 'first_tool_read_pct',
         metric_value: readPct,
         metric_detail: detail,
+        provider,
       });
     }
   }
@@ -422,25 +478,31 @@ export class MetricsAnalyzer {
   // -----------------------------------------------------------------------
   // 8. reasoning_loops_per_1k
   // -----------------------------------------------------------------------
-  private computeReasoningLoopsPer1k(db: VitalsDB, raw: Database.Database): void {
+  private computeReasoningLoopsPer1k(db: VitalsDB, raw: Database.Database, provider: string): void {
+    const pcRL = providerClauses(provider, 'rl');
+    const pcTC = providerClauses(provider, 'tc');
     const rows = raw
       .prepare(
         `
-      SELECT day, loops, tool_count FROM (
-        SELECT ${dateExpr} AS day, COUNT(*) AS loops
-        FROM reasoning_loops
-        WHERE timestamp IS NOT NULL
+      SELECT rl.day, rl.loops, tc.tool_count FROM (
+        SELECT substr(rl.timestamp, 1, 10) AS day, COUNT(*) AS loops
+        FROM reasoning_loops rl${pcRL.join}
+        WHERE rl.timestamp IS NOT NULL${pcRL.where}
         GROUP BY day
       ) rl
       JOIN (
-        SELECT ${dateExpr} AS day2, COUNT(*) AS tool_count
-        FROM tool_calls
-        WHERE timestamp IS NOT NULL
+        SELECT substr(tc.timestamp, 1, 10) AS day2, COUNT(*) AS tool_count
+        FROM tool_calls tc${pcTC.join}
+        WHERE tc.timestamp IS NOT NULL${pcTC.where}
         GROUP BY day2
       ) tc ON rl.day = tc.day2
     `,
       )
-      .all() as { day: string; loops: number; tool_count: number }[];
+      .all(...pcRL.params, ...pcTC.params) as {
+      day: string;
+      loops: number;
+      tool_count: number;
+    }[];
 
     for (const r of rows) {
       const per1k = safeDivide(r.loops, r.tool_count / 1000);
@@ -448,6 +510,7 @@ export class MetricsAnalyzer {
         date: r.day,
         metric_name: 'reasoning_loops_per_1k',
         metric_value: per1k,
+        provider,
       });
     }
   }
@@ -455,19 +518,19 @@ export class MetricsAnalyzer {
   // -----------------------------------------------------------------------
   // 9. laziness_total
   // -----------------------------------------------------------------------
-  private computeLazinessTotal(db: VitalsDB, raw: Database.Database): void {
+  private computeLazinessTotal(db: VitalsDB, raw: Database.Database, provider: string): void {
+    const pc = providerClauses(provider, 'lv');
     const rows = raw
       .prepare(
         `
-      SELECT ${dateExpr} AS day, category, COUNT(*) AS cnt
-      FROM laziness_violations
-      WHERE timestamp IS NOT NULL
-      GROUP BY day, category
+      SELECT substr(lv.timestamp, 1, 10) AS day, lv.category, COUNT(*) AS cnt
+      FROM laziness_violations lv${pc.join}
+      WHERE lv.timestamp IS NOT NULL${pc.where}
+      GROUP BY day, lv.category
     `,
       )
-      .all() as { day: string; category: string; cnt: number }[];
+      .all(...pc.params) as { day: string; category: string; cnt: number }[];
 
-    // Aggregate by day with category breakdown
     const byDay: Record<string, Record<string, number>> = {};
     for (const r of rows) {
       if (!byDay[r.day]) byDay[r.day] = {};
@@ -481,6 +544,7 @@ export class MetricsAnalyzer {
         metric_name: 'laziness_total',
         metric_value: total,
         metric_detail: JSON.stringify(categories),
+        provider,
       });
     }
   }
@@ -488,25 +552,35 @@ export class MetricsAnalyzer {
   // -----------------------------------------------------------------------
   // 10. self_admitted_failures_per_1k
   // -----------------------------------------------------------------------
-  private computeSelfAdmittedFailuresPer1k(db: VitalsDB, raw: Database.Database): void {
+  private computeSelfAdmittedFailuresPer1k(
+    db: VitalsDB,
+    raw: Database.Database,
+    provider: string,
+  ): void {
+    const pcSF = providerClauses(provider, 'sf');
+    const pcTC = providerClauses(provider, 'tc');
     const rows = raw
       .prepare(
         `
-      SELECT day, failures, tool_count FROM (
-        SELECT ${dateExpr} AS day, COUNT(*) AS failures
-        FROM self_admitted_failures
-        WHERE timestamp IS NOT NULL
+      SELECT sf.day, sf.failures, tc.tool_count FROM (
+        SELECT substr(sf.timestamp, 1, 10) AS day, COUNT(*) AS failures
+        FROM self_admitted_failures sf${pcSF.join}
+        WHERE sf.timestamp IS NOT NULL${pcSF.where}
         GROUP BY day
       ) sf
       JOIN (
-        SELECT ${dateExpr} AS day2, COUNT(*) AS tool_count
-        FROM tool_calls
-        WHERE timestamp IS NOT NULL
+        SELECT substr(tc.timestamp, 1, 10) AS day2, COUNT(*) AS tool_count
+        FROM tool_calls tc${pcTC.join}
+        WHERE tc.timestamp IS NOT NULL${pcTC.where}
         GROUP BY day2
       ) tc ON sf.day = tc.day2
     `,
       )
-      .all() as { day: string; failures: number; tool_count: number }[];
+      .all(...pcSF.params, ...pcTC.params) as {
+      day: string;
+      failures: number;
+      tool_count: number;
+    }[];
 
     for (const r of rows) {
       const per1k = safeDivide(r.failures, r.tool_count / 1000);
@@ -514,6 +588,7 @@ export class MetricsAnalyzer {
         date: r.day,
         metric_name: 'self_admitted_failures_per_1k',
         metric_value: per1k,
+        provider,
       });
     }
   }
@@ -521,25 +596,31 @@ export class MetricsAnalyzer {
   // -----------------------------------------------------------------------
   // 11. user_interrupts_per_1k
   // -----------------------------------------------------------------------
-  private computeUserInterruptsPer1k(db: VitalsDB, raw: Database.Database): void {
+  private computeUserInterruptsPer1k(db: VitalsDB, raw: Database.Database, provider: string): void {
+    const pcUP = providerClauses(provider, 'up');
+    const pcTC = providerClauses(provider, 'tc');
     const rows = raw
       .prepare(
         `
-      SELECT day, interrupts, tool_count FROM (
-        SELECT ${dateExpr} AS day, COUNT(*) AS interrupts
-        FROM user_prompts
-        WHERE timestamp IS NOT NULL AND is_interrupt = 1
+      SELECT up.day, up.interrupts, tc.tool_count FROM (
+        SELECT substr(up.timestamp, 1, 10) AS day, COUNT(*) AS interrupts
+        FROM user_prompts up${pcUP.join}
+        WHERE up.timestamp IS NOT NULL AND up.is_interrupt = 1${pcUP.where}
         GROUP BY day
       ) up
       JOIN (
-        SELECT ${dateExpr} AS day2, COUNT(*) AS tool_count
-        FROM tool_calls
-        WHERE timestamp IS NOT NULL
+        SELECT substr(tc.timestamp, 1, 10) AS day2, COUNT(*) AS tool_count
+        FROM tool_calls tc${pcTC.join}
+        WHERE tc.timestamp IS NOT NULL${pcTC.where}
         GROUP BY day2
       ) tc ON up.day = tc.day2
     `,
       )
-      .all() as { day: string; interrupts: number; tool_count: number }[];
+      .all(...pcUP.params, ...pcTC.params) as {
+      day: string;
+      interrupts: number;
+      tool_count: number;
+    }[];
 
     for (const r of rows) {
       const per1k = safeDivide(r.interrupts, r.tool_count / 1000);
@@ -547,6 +628,7 @@ export class MetricsAnalyzer {
         date: r.day,
         metric_name: 'user_interrupts_per_1k',
         metric_value: per1k,
+        provider,
       });
     }
   }
@@ -554,48 +636,56 @@ export class MetricsAnalyzer {
   // -----------------------------------------------------------------------
   // 12. sentiment_ratio
   // -----------------------------------------------------------------------
-  private computeSentimentRatio(db: VitalsDB, raw: Database.Database): void {
+  private computeSentimentRatio(db: VitalsDB, raw: Database.Database, provider: string): void {
+    const pc = providerClauses(provider, 'up');
     const rows = raw
       .prepare(
         `
-      SELECT ${dateExpr} AS day,
-             SUM(positive_word_count) AS positives,
-             SUM(negative_word_count) AS negatives
-      FROM user_prompts
-      WHERE timestamp IS NOT NULL
+      SELECT substr(up.timestamp, 1, 10) AS day,
+             SUM(up.positive_word_count) AS positives,
+             SUM(up.negative_word_count) AS negatives
+      FROM user_prompts up${pc.join}
+      WHERE up.timestamp IS NOT NULL${pc.where}
       GROUP BY day
     `,
       )
-      .all() as { day: string; positives: number; negatives: number }[];
+      .all(...pc.params) as { day: string; positives: number; negatives: number }[];
 
     for (const r of rows) {
       const value = r.negatives === 0 ? r.positives : r.positives / r.negatives;
-      db.upsertDailyMetric({ date: r.day, metric_name: 'sentiment_ratio', metric_value: value });
+      db.upsertDailyMetric({
+        date: r.day,
+        metric_name: 'sentiment_ratio',
+        metric_value: value,
+        provider,
+      });
     }
   }
 
   // -----------------------------------------------------------------------
   // 13. frustration_rate
   // -----------------------------------------------------------------------
-  private computeFrustrationRate(db: VitalsDB, raw: Database.Database): void {
+  private computeFrustrationRate(db: VitalsDB, raw: Database.Database, provider: string): void {
+    const pc = providerClauses(provider, 'up');
     const rows = raw
       .prepare(
         `
-      SELECT ${dateExpr} AS day,
+      SELECT substr(up.timestamp, 1, 10) AS day,
              COUNT(*) AS total,
-             SUM(CASE WHEN has_frustration = 1 THEN 1 ELSE 0 END) AS frustrated
-      FROM user_prompts
-      WHERE timestamp IS NOT NULL
+             SUM(CASE WHEN up.has_frustration = 1 THEN 1 ELSE 0 END) AS frustrated
+      FROM user_prompts up${pc.join}
+      WHERE up.timestamp IS NOT NULL${pc.where}
       GROUP BY day
     `,
       )
-      .all() as { day: string; total: number; frustrated: number }[];
+      .all(...pc.params) as { day: string; total: number; frustrated: number }[];
 
     for (const r of rows) {
       db.upsertDailyMetric({
         date: r.day,
         metric_name: 'frustration_rate',
         metric_value: safeDivide(r.frustrated, r.total) * 100,
+        provider,
       });
     }
   }
@@ -603,20 +693,23 @@ export class MetricsAnalyzer {
   // -----------------------------------------------------------------------
   // 14. session_autonomy_median
   // -----------------------------------------------------------------------
-  private computeSessionAutonomyMedian(db: VitalsDB, raw: Database.Database): void {
-    // Get all user prompts ordered by session and timestamp
+  private computeSessionAutonomyMedian(
+    db: VitalsDB,
+    raw: Database.Database,
+    provider: string,
+  ): void {
+    const pc = providerClauses(provider, 'up');
     const rows = raw
       .prepare(
         `
-      SELECT session_id, timestamp
-      FROM user_prompts
-      WHERE timestamp IS NOT NULL
-      ORDER BY session_id, timestamp
+      SELECT up.session_id, up.timestamp
+      FROM user_prompts up${pc.join}
+      WHERE up.timestamp IS NOT NULL${pc.where}
+      ORDER BY up.session_id, up.timestamp
     `,
       )
-      .all() as { session_id: string; timestamp: string }[];
+      .all(...pc.params) as { session_id: string; timestamp: string }[];
 
-    // Compute time gaps between consecutive prompts within each session
     const dayGaps: Record<string, number[]> = {};
     let prevSession: string | null = null;
     let prevTimestamp: string | null = null;
@@ -640,6 +733,7 @@ export class MetricsAnalyzer {
         date: day,
         metric_name: 'session_autonomy_median',
         metric_value: median(gaps),
+        provider,
       });
     }
   }
@@ -647,18 +741,19 @@ export class MetricsAnalyzer {
   // -----------------------------------------------------------------------
   // 15. edit_churn_rate
   // -----------------------------------------------------------------------
-  private computeEditChurnRate(db: VitalsDB, raw: Database.Database): void {
-    // Get all tool calls ordered by session and sequence_num for churn analysis
+  private computeEditChurnRate(db: VitalsDB, raw: Database.Database, provider: string): void {
+    const pc = providerClauses(provider, 'tc');
     const calls = raw
       .prepare(
         `
-      SELECT session_id, sequence_num, category, target_file, ${dateExpr} AS day
-      FROM tool_calls
-      WHERE timestamp IS NOT NULL
-      ORDER BY session_id, sequence_num
+      SELECT tc.session_id, tc.sequence_num, tc.category, tc.target_file,
+             substr(tc.timestamp, 1, 10) AS day
+      FROM tool_calls tc${pc.join}
+      WHERE tc.timestamp IS NOT NULL${pc.where}
+      ORDER BY tc.session_id, tc.sequence_num
     `,
       )
-      .all() as {
+      .all(...pc.params) as {
       session_id: string;
       sequence_num: number;
       category: string;
@@ -666,7 +761,6 @@ export class MetricsAnalyzer {
       day: string;
     }[];
 
-    // Group by session
     const sessions: Record<string, typeof calls> = {};
     for (const c of calls) {
       if (!sessions[c.session_id]) sessions[c.session_id] = [];
@@ -676,11 +770,9 @@ export class MetricsAnalyzer {
     const dayStats: Record<string, { totalEdits: number; churnEdits: number }> = {};
 
     for (const sessionCalls of Object.values(sessions)) {
-      // Slide a window of 10 consecutive tool calls
       for (let windowStart = 0; windowStart <= sessionCalls.length - 10; windowStart++) {
         const window = sessionCalls.slice(windowStart, windowStart + 10);
 
-        // Count edits per file, excluding files that were read between edits
         const fileEditIndices: Record<string, number[]> = {};
         const fileReadIndices: Record<string, number[]> = {};
 
@@ -697,13 +789,11 @@ export class MetricsAnalyzer {
           }
         }
 
-        // For files edited 3+ times in window, check if there are reads between edits
         for (const [file, editIdxs] of Object.entries(fileEditIndices)) {
           if (editIdxs.length < 3) continue;
 
           const readIdxs = fileReadIndices[file] || [];
 
-          // Check if any read appears between consecutive edits
           let hasReadBetweenEdits = false;
           for (let i = 0; i < editIdxs.length - 1; i++) {
             const between = readIdxs.some((ri) => ri > editIdxs[i] && ri < editIdxs[i + 1]);
@@ -713,7 +803,6 @@ export class MetricsAnalyzer {
             }
           }
 
-          // "no reads of that file between edits" — if no reads between any pair, these are churn
           if (!hasReadBetweenEdits) {
             for (const idx of editIdxs) {
               const call = window[idx];
@@ -725,7 +814,6 @@ export class MetricsAnalyzer {
         }
       }
 
-      // Count total edits per day from this session
       for (const c of sessionCalls) {
         if (c.category === 'edit') {
           if (!dayStats[c.day]) dayStats[c.day] = { totalEdits: 0, churnEdits: 0 };
@@ -739,6 +827,7 @@ export class MetricsAnalyzer {
         date: day,
         metric_name: 'edit_churn_rate',
         metric_value: safeDivide(stats.churnEdits, stats.totalEdits) * 100,
+        provider,
       });
     }
   }
@@ -746,25 +835,27 @@ export class MetricsAnalyzer {
   // -----------------------------------------------------------------------
   // 16. bash_success_rate
   // -----------------------------------------------------------------------
-  private computeBashSuccessRate(db: VitalsDB, raw: Database.Database): void {
+  private computeBashSuccessRate(db: VitalsDB, raw: Database.Database, provider: string): void {
+    const pc = providerClauses(provider, 'tc');
     const rows = raw
       .prepare(
         `
-      SELECT ${dateExpr} AS day,
-             SUM(CASE WHEN bash_success = 1 THEN 1 ELSE 0 END) AS successes,
+      SELECT substr(tc.timestamp, 1, 10) AS day,
+             SUM(CASE WHEN tc.bash_success = 1 THEN 1 ELSE 0 END) AS successes,
              COUNT(*) AS total
-      FROM tool_calls
-      WHERE timestamp IS NOT NULL AND bash_success IS NOT NULL
+      FROM tool_calls tc${pc.join}
+      WHERE tc.timestamp IS NOT NULL AND tc.bash_success IS NOT NULL${pc.where}
       GROUP BY day
     `,
       )
-      .all() as { day: string; successes: number; total: number }[];
+      .all(...pc.params) as { day: string; successes: number; total: number }[];
 
     for (const r of rows) {
       db.upsertDailyMetric({
         date: r.day,
         metric_name: 'bash_success_rate',
         metric_value: safeDivide(r.successes, r.total) * 100,
+        provider,
       });
     }
   }
@@ -772,25 +863,27 @@ export class MetricsAnalyzer {
   // -----------------------------------------------------------------------
   // 17. subagent_pct
   // -----------------------------------------------------------------------
-  private computeSubagentPct(db: VitalsDB, raw: Database.Database): void {
+  private computeSubagentPct(db: VitalsDB, raw: Database.Database, provider: string): void {
+    const pc = providerClauses(provider, 'tc');
     const rows = raw
       .prepare(
         `
-      SELECT ${dateExpr} AS day,
-             SUM(CASE WHEN category = 'agent' THEN 1 ELSE 0 END) AS agents,
+      SELECT substr(tc.timestamp, 1, 10) AS day,
+             SUM(CASE WHEN tc.category = 'agent' THEN 1 ELSE 0 END) AS agents,
              COUNT(*) AS total
-      FROM tool_calls
-      WHERE timestamp IS NOT NULL
+      FROM tool_calls tc${pc.join}
+      WHERE tc.timestamp IS NOT NULL${pc.where}
       GROUP BY day
     `,
       )
-      .all() as { day: string; agents: number; total: number }[];
+      .all(...pc.params) as { day: string; agents: number; total: number }[];
 
     for (const r of rows) {
       db.upsertDailyMetric({
         date: r.day,
         metric_name: 'subagent_pct',
         metric_value: safeDivide(r.agents, r.total) * 100,
+        provider,
       });
     }
   }
@@ -798,19 +891,18 @@ export class MetricsAnalyzer {
   // -----------------------------------------------------------------------
   // 18. context_pressure
   // -----------------------------------------------------------------------
-  private computeContextPressure(db: VitalsDB, raw: Database.Database): void {
-    // For each session, compute cumulative token counts for each message, then
-    // map tool calls into context quartiles and measure quality.
+  private computeContextPressure(db: VitalsDB, raw: Database.Database, provider: string): void {
+    const sessionFilter = provider === '_all' ? '' : ' AND provider = ?';
+    const sessionParams = provider === '_all' ? [] : [provider];
     const sessions = raw
       .prepare(
         `
       SELECT id, started_at FROM sessions
-      WHERE started_at IS NOT NULL
+      WHERE started_at IS NOT NULL${sessionFilter}
     `,
       )
-      .all() as { id: string; started_at: string }[];
+      .all(...sessionParams) as { id: string; started_at: string }[];
 
-    // Aggregate across all days
     const dayQuartileData: Record<
       string,
       {
@@ -842,7 +934,6 @@ export class MetricsAnalyzer {
       const messages = msgStmt.all(session.id) as { tokens: number; timestamp: string }[];
       if (messages.length === 0) continue;
 
-      // Build cumulative token totals at each timestamp
       let cumulative = 0;
       const tokenTimeline: { timestamp: string; cumTokens: number }[] = [];
       for (const m of messages) {
@@ -852,7 +943,6 @@ export class MetricsAnalyzer {
 
       if (cumulative === 0) continue;
 
-      // Quartile boundaries
       const q1Max = cumulative * 0.25;
       const q2Max = cumulative * 0.5;
       const q3Max = cumulative * 0.75;
@@ -867,7 +957,6 @@ export class MetricsAnalyzer {
       }[];
 
       for (const tc of toolCalls) {
-        // Find the cumulative token count at this tool call's timestamp
         let tokensAtPoint = 0;
         for (const tl of tokenTimeline) {
           if (tl.timestamp <= tc.timestamp) tokensAtPoint = tl.cumTokens;
@@ -904,8 +993,6 @@ export class MetricsAnalyzer {
         };
       }
 
-      // Use Q4 bash_fail_rate minus Q1 bash_fail_rate as the headline value
-      // (higher = more degradation under context pressure)
       const pressureValue = detail.q4.bash_fail_rate - detail.q1.bash_fail_rate;
 
       db.upsertDailyMetric({
@@ -913,6 +1000,7 @@ export class MetricsAnalyzer {
         metric_name: 'context_pressure',
         metric_value: pressureValue,
         metric_detail: JSON.stringify(detail),
+        provider,
       });
     }
   }
@@ -920,21 +1008,22 @@ export class MetricsAnalyzer {
   // -----------------------------------------------------------------------
   // 19. cost_estimate
   // -----------------------------------------------------------------------
-  private computeCostEstimate(db: VitalsDB, raw: Database.Database): void {
+  private computeCostEstimate(db: VitalsDB, raw: Database.Database, provider: string): void {
+    const pc = providerClauses(provider, 'm');
     const rows = raw
       .prepare(
         `
-      SELECT ${dateExpr} AS day,
-             SUM(COALESCE(input_tokens, 0)) AS input_tokens,
-             SUM(COALESCE(output_tokens, 0)) AS output_tokens,
-             SUM(COALESCE(cache_read_tokens, 0)) AS cache_read_tokens,
-             SUM(COALESCE(cache_creation_tokens, 0)) AS cache_creation_tokens
-      FROM messages
-      WHERE timestamp IS NOT NULL
+      SELECT substr(m.timestamp, 1, 10) AS day,
+             SUM(COALESCE(m.input_tokens, 0)) AS input_tokens,
+             SUM(COALESCE(m.output_tokens, 0)) AS output_tokens,
+             SUM(COALESCE(m.cache_read_tokens, 0)) AS cache_read_tokens,
+             SUM(COALESCE(m.cache_creation_tokens, 0)) AS cache_creation_tokens
+      FROM messages m${pc.join}
+      WHERE m.timestamp IS NOT NULL${pc.where}
       GROUP BY day
     `,
       )
-      .all() as {
+      .all(...pc.params) as {
       day: string;
       input_tokens: number;
       output_tokens: number;
@@ -948,14 +1037,21 @@ export class MetricsAnalyzer {
         r.output_tokens * 0.000075 +
         r.cache_read_tokens * 0.0000015 +
         r.cache_creation_tokens * 0.00001875;
-      db.upsertDailyMetric({ date: r.day, metric_name: 'cost_estimate', metric_value: cost });
+      db.upsertDailyMetric({
+        date: r.day,
+        metric_name: 'cost_estimate',
+        metric_value: cost,
+        provider,
+      });
     }
   }
 
   // -----------------------------------------------------------------------
   // 20. prompts_per_session
   // -----------------------------------------------------------------------
-  private computePromptsPerSession(db: VitalsDB, raw: Database.Database): void {
+  private computePromptsPerSession(db: VitalsDB, raw: Database.Database, provider: string): void {
+    const sessionFilter = provider === '_all' ? '' : ' AND s.provider = ?';
+    const sessionParams = provider === '_all' ? [] : [provider];
     const rows = raw
       .prepare(
         `
@@ -964,17 +1060,18 @@ export class MetricsAnalyzer {
              COUNT(up.id) AS prompt_count
       FROM sessions s
       LEFT JOIN user_prompts up ON up.session_id = s.id
-      WHERE s.started_at IS NOT NULL
+      WHERE s.started_at IS NOT NULL${sessionFilter}
       GROUP BY day
     `,
       )
-      .all() as { day: string; session_count: number; prompt_count: number }[];
+      .all(...sessionParams) as { day: string; session_count: number; prompt_count: number }[];
 
     for (const r of rows) {
       db.upsertDailyMetric({
         date: r.day,
         metric_name: 'prompts_per_session',
         metric_value: safeDivide(r.prompt_count, r.session_count),
+        provider,
       });
     }
   }
@@ -1010,29 +1107,30 @@ export class MetricsAnalyzer {
   // -----------------------------------------------------------------------
   // 21. time_of_day_quality — Read:Edit ratio by hour of day
   // -----------------------------------------------------------------------
-  private computeTimeOfDayQuality(db: VitalsDB, raw: Database.Database): void {
-    // Compute average read:edit ratio per hour of day
+  private computeTimeOfDayQuality(db: VitalsDB, raw: Database.Database, provider: string): void {
+    const pc = providerClauses(provider, 'tc');
     const rows = raw
       .prepare(
         `
       SELECT
-        CAST(substr(timestamp, 12, 2) AS INTEGER) AS hour,
-        SUM(CASE WHEN category = 'read' THEN 1 ELSE 0 END) AS reads,
-        SUM(CASE WHEN category = 'edit' THEN 1 ELSE 0 END) AS edits
-      FROM tool_calls
-      WHERE timestamp IS NOT NULL
+        CAST(substr(tc.timestamp, 12, 2) AS INTEGER) AS hour,
+        SUM(CASE WHEN tc.category = 'read' THEN 1 ELSE 0 END) AS reads,
+        SUM(CASE WHEN tc.category = 'edit' THEN 1 ELSE 0 END) AS edits
+      FROM tool_calls tc${pc.join}
+      WHERE tc.timestamp IS NOT NULL${pc.where}
       GROUP BY hour
       ORDER BY hour
     `,
       )
-      .all() as Array<{ hour: number; reads: number; edits: number }>;
+      .all(...pc.params) as Array<{ hour: number; reads: number; edits: number }>;
+
+    if (rows.length === 0) return;
 
     const hourData: Record<number, number> = {};
     for (const r of rows) {
       hourData[r.hour] = r.edits > 0 ? r.reads / r.edits : r.reads;
     }
 
-    // Find best and worst hours
     let bestHour = 0,
       worstHour = 0,
       bestRatio = 0,
@@ -1048,7 +1146,6 @@ export class MetricsAnalyzer {
       }
     }
 
-    // Store as a single metric with detail JSON
     const today = new Date().toISOString().slice(0, 10);
     db.upsertDailyMetric({
       date: today,
@@ -1061,25 +1158,27 @@ export class MetricsAnalyzer {
         worstHour,
         worstRatio: Math.round(worstRatio * 10) / 10,
       }),
+      provider,
     });
   }
 
   // -----------------------------------------------------------------------
   // 22. tool_diversity — unique tools used per session (more = better research)
   // -----------------------------------------------------------------------
-  private computeToolDiversity(db: VitalsDB, raw: Database.Database): void {
+  private computeToolDiversity(db: VitalsDB, raw: Database.Database, provider: string): void {
+    const pc = providerClauses(provider, 'tc');
     const rows = raw
       .prepare(
         `
-      SELECT ${dateExpr} AS day,
-        COUNT(DISTINCT tool_name) AS unique_tools,
+      SELECT substr(tc.timestamp, 1, 10) AS day,
+        COUNT(DISTINCT tc.tool_name) AS unique_tools,
         COUNT(*) AS total_calls
-      FROM tool_calls
-      WHERE timestamp IS NOT NULL
+      FROM tool_calls tc${pc.join}
+      WHERE tc.timestamp IS NOT NULL${pc.where}
       GROUP BY day
     `,
       )
-      .all() as Array<{ day: string; unique_tools: number; total_calls: number }>;
+      .all(...pc.params) as Array<{ day: string; unique_tools: number; total_calls: number }>;
 
     for (const r of rows) {
       db.upsertDailyMetric({
@@ -1087,6 +1186,7 @@ export class MetricsAnalyzer {
         metric_name: 'tool_diversity',
         metric_value: r.unique_tools,
         metric_detail: JSON.stringify({ unique_tools: r.unique_tools, total_calls: r.total_calls }),
+        provider,
       });
     }
   }
@@ -1094,7 +1194,13 @@ export class MetricsAnalyzer {
   // -----------------------------------------------------------------------
   // 23. token_efficiency — output tokens per successful edit
   // -----------------------------------------------------------------------
-  private computeTokenEfficiency(db: VitalsDB, raw: Database.Database): void {
+  private computeTokenEfficiency(db: VitalsDB, raw: Database.Database, provider: string): void {
+    const pcM = providerClauses(provider, 'm');
+    const editFilter =
+      provider === '_all'
+        ? ''
+        : ' AND tc2.session_id IN (SELECT id FROM sessions WHERE provider = ?)';
+    const params = provider === '_all' ? [...pcM.params] : [...pcM.params, provider];
     const rows = raw
       .prepare(
         `
@@ -1102,13 +1208,13 @@ export class MetricsAnalyzer {
         SUM(m.output_tokens) AS total_output,
         (SELECT COUNT(*) FROM tool_calls tc2
          WHERE tc2.category = 'edit'
-           AND substr(tc2.timestamp, 1, 10) = substr(m.timestamp, 1, 10)) AS edits
-      FROM messages m
-      WHERE m.timestamp IS NOT NULL AND m.output_tokens IS NOT NULL
+           AND substr(tc2.timestamp, 1, 10) = substr(m.timestamp, 1, 10)${editFilter}) AS edits
+      FROM messages m${pcM.join}
+      WHERE m.timestamp IS NOT NULL AND m.output_tokens IS NOT NULL${pcM.where}
       GROUP BY day
     `,
       )
-      .all() as Array<{ day: string; total_output: number; edits: number }>;
+      .all(...params) as Array<{ day: string; total_output: number; edits: number }>;
 
     for (const r of rows) {
       const tokensPerEdit = r.edits > 0 ? r.total_output / r.edits : 0;
@@ -1117,6 +1223,7 @@ export class MetricsAnalyzer {
         metric_name: 'token_efficiency',
         metric_value: Math.round(tokensPerEdit),
         metric_detail: JSON.stringify({ total_output: r.total_output, edits: r.edits }),
+        provider,
       });
     }
   }
@@ -1124,7 +1231,9 @@ export class MetricsAnalyzer {
   // -----------------------------------------------------------------------
   // 24. session_length_minutes — average session duration
   // -----------------------------------------------------------------------
-  private computeSessionLength(db: VitalsDB, raw: Database.Database): void {
+  private computeSessionLength(db: VitalsDB, raw: Database.Database, provider: string): void {
+    const sessionFilter = provider === '_all' ? '' : ' AND provider = ?';
+    const sessionParams = provider === '_all' ? [] : [provider];
     const rows = raw
       .prepare(
         `
@@ -1134,11 +1243,11 @@ export class MetricsAnalyzer {
         ) AS avg_minutes
       FROM sessions
       WHERE started_at IS NOT NULL AND ended_at IS NOT NULL
-        AND ended_at > started_at
+        AND ended_at > started_at${sessionFilter}
       GROUP BY day
     `,
       )
-      .all() as Array<{ day: string; avg_minutes: number }>;
+      .all(...sessionParams) as Array<{ day: string; avg_minutes: number }>;
 
     for (const r of rows) {
       if (r.avg_minutes > 0) {
@@ -1146,6 +1255,7 @@ export class MetricsAnalyzer {
           date: r.day,
           metric_name: 'session_length_minutes',
           metric_value: Math.round(r.avg_minutes * 10) / 10,
+          provider,
         });
       }
     }
