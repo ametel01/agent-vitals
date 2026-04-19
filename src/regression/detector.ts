@@ -98,15 +98,27 @@ const METRIC_LABELS: Record<string, string> = {
   bash_success_rate: 'Bash success rate',
 };
 
+// Metrics whose thresholds were calibrated on Claude session logs and are not
+// portable to other providers (per Phase 4, Step 13 of the Codex plan).
+// When the detector is scoped to a non-Claude provider, these are skipped.
+const CLAUDE_ONLY_METRICS = new Set<string>([
+  'thinking_depth_median',
+  'thinking_depth_redacted_pct',
+  'cost_estimate',
+  'context_pressure',
+]);
+
 // ---------------------------------------------------------------------------
 // RegressionDetector
 // ---------------------------------------------------------------------------
 
 export class RegressionDetector {
   private db: VitalsDB;
+  private provider: string;
 
-  constructor(db: VitalsDB) {
+  constructor(db: VitalsDB, provider: string = '_all') {
     this.db = db;
+    this.provider = provider;
   }
 
   // -------------------------------------------------------------------------
@@ -118,7 +130,7 @@ export class RegressionDetector {
 
     // Determine date boundaries for the two 7-day windows.
     // "Current" = most recent 7 days, "Previous" = the 7 days before that.
-    const latestRow = this.db.getDateRange();
+    const latestRow = this.db.getDateRange(this.provider);
     if (!latestRow?.max) return alerts;
 
     const latestDate = new Date(latestRow.max);
@@ -137,9 +149,26 @@ export class RegressionDetector {
     previousStartDate.setDate(previousStartDate.getDate() - 6);
     const previousStart = this.fmtDate(previousStartDate);
 
+    const isNonClaudeProvider = this.provider !== '_all' && this.provider !== 'claude';
+
     for (const [metric, config] of Object.entries(THRESHOLDS)) {
-      const currentRows = this.db.getMetricForDateRange(metric, currentStart, currentEnd);
-      const previousRows = this.db.getMetricForDateRange(metric, previousStart, previousEnd);
+      // Skip Claude-calibrated metrics for other providers (e.g. Codex) — their
+      // thresholds have not been calibrated and would produce confident but
+      // invalid alerts.
+      if (isNonClaudeProvider && CLAUDE_ONLY_METRICS.has(metric)) continue;
+
+      const currentRows = this.db.getMetricForDateRange(
+        metric,
+        currentStart,
+        currentEnd,
+        this.provider,
+      );
+      const previousRows = this.db.getMetricForDateRange(
+        metric,
+        previousStart,
+        previousEnd,
+        this.provider,
+      );
 
       // Need data in both windows to compare
       if (currentRows.length === 0 || previousRows.length === 0) continue;
