@@ -52,7 +52,7 @@ Terminal report with sparklines and trend arrows. Side-by-side period comparison
 `agent-vitals prescribe --apply`
 When metrics degrade, prescribe outputs the exact env vars, `settings.json` changes, and `CLAUDE.md` rules to fix them. `--apply` writes them automatically.
 
-Prescriptions are provider-specific. Claude prescriptions can be applied automatically; Codex prescriptions are dry-run recommendations for `~/.codex/config.toml`, `~/.codex/rules/*.rules`, and project instructions.
+Prescriptions are provider-specific and both providers support `--apply`. Claude prescriptions write to `~/.claude/settings.json` and `CLAUDE.md`; Codex prescriptions write to `~/.codex/config.toml`, `~/.codex/rules/*.rules`, and `AGENTS.md`.
 
 ### Self-Correct
 
@@ -247,39 +247,54 @@ agent-vitals prescribe
     agent-vitals prescribe --apply
 ```
 
-Use `agent-vitals baseline` to see the recommended settings for every Claude Code user, regardless of current metrics.
+Use `agent-vitals baseline` to see recommended baseline settings for Claude Code or Codex users, regardless of current metrics.
 
-Codex support currently covers scanning, provider-aware metrics, health checks, terminal reports, Markdown reports, dashboard API filtering, comparisons, impact analysis, and dry-run prescriptions. Claude-calibrated benchmarks for thinking depth, redaction rate, cost, and context pressure are shown as provider-local for Codex instead of being judged against Claude thresholds.
+Codex support currently covers scanning, provider-aware metrics, health checks, terminal reports, Markdown reports, dashboard filtering with a source selector, comparisons, impact analysis, baseline recommendations, and `prescribe --apply` writers for `~/.codex/config.toml`, `~/.codex/rules/*.rules`, and project `AGENTS.md`. Claude-calibrated benchmarks for thinking depth, redaction rate, cost, and context pressure are shown as provider-local for Codex instead of being judged against Claude thresholds.
 
 ## Commands
 
-| Command                             | Description                                             |
-| ----------------------------------- | ------------------------------------------------------- |
-| `scan`                              | Ingest Claude and Codex session logs                    |
-| `scan --source codex`               | Ingest Codex CLI session logs                           |
-| `scan --source all`                 | Ingest Claude and Codex session logs                    |
-| `health`                            | One-line green/yellow/red status across all sources     |
-| `health --source codex`             | One-line health status for Codex metrics                |
-| `report`                            | Terminal report with sparklines across all sources      |
-| `report --source codex`             | Terminal report filtered to Codex sessions              |
-| `report --format md`                | GitHub-postable markdown report                         |
-| `report --source codex --format md` | Markdown report filtered to Codex sessions              |
-| `baseline`                          | Show recommended baseline settings for Claude users     |
-| `baseline --source codex`           | Explain that Codex baseline settings are unavailable    |
-| `baseline --apply`                  | Write baseline settings to `~/.claude/settings.json`    |
-| `prescribe`                         | Output Claude fix recommendations from degraded metrics |
-| `prescribe --source codex`          | Show dry-run Codex fixes for rules/config/instructions  |
-| `prescribe --apply`                 | Apply Claude fixes automatically                        |
-| `dashboard`                         | Web dashboard on localhost:7847 across all sources      |
-| `dashboard --source codex`          | Open dashboard with Codex as the default source         |
-| `compare <p1> <p2>`                 | Side-by-side period comparison across all sources       |
-| `compare <p1> <p2> --source codex`  | Side-by-side period comparison for Codex metrics        |
-| `annotate "<desc>"`                 | Log a manual change event                               |
-| `annotate "<desc>" --source codex`  | Accept source flag for CLI consistency                  |
-| `impact <id>`                       | Before/after analysis for a change across all sources   |
-| `impact <id> --source codex`        | Before/after analysis for Codex metrics                 |
-| `changes`                           | List all tracked changes                                |
-| `changes --source codex`            | Accept source flag for CLI consistency                  |
+| Command                              | Description                                             |
+| ------------------------------------ | ------------------------------------------------------- |
+| `scan`                               | Ingest Claude and Codex session logs                    |
+| `scan --source claude`               | Ingest Claude Code session logs                         |
+| `scan --source codex`                | Ingest Codex CLI session logs                           |
+| `scan --source all`                  | Ingest Claude and Codex session logs                    |
+| `health`                             | One-line green/yellow/red status across all sources     |
+| `health --source claude`             | One-line health status for Claude metrics               |
+| `health --source codex`              | One-line health status for Codex metrics                |
+| `report`                             | Terminal report with sparklines across all sources      |
+| `report --source claude`             | Terminal report filtered to Claude sessions             |
+| `report --source codex`              | Terminal report filtered to Codex sessions              |
+| `report --format md`                 | GitHub-postable markdown report                         |
+| `report --source claude --format md` | Markdown report filtered to Claude sessions             |
+| `report --source codex --format md`  | Markdown report filtered to Codex sessions              |
+| `baseline`                           | Show recommended baseline settings for Claude users     |
+| `baseline --source claude`           | Show recommended baseline settings for Claude users     |
+| `baseline --source codex`            | Show recommended baseline settings for Codex users      |
+| `baseline --apply`                   | Write Claude baseline settings to `~/.claude/`          |
+| `baseline --source claude --apply`   | Write Claude baseline settings to `~/.claude/`          |
+| `baseline --source codex --apply`    | Write Codex baselines to `~/.codex/` and `./AGENTS.md`  |
+| `prescribe`                          | Output Claude fix recommendations from degraded metrics |
+| `prescribe --source claude`          | Output Claude fix recommendations from degraded metrics |
+| `prescribe --source codex`           | Output Codex fix recommendations from degraded metrics  |
+| `prescribe --apply`                  | Apply Claude fixes automatically                        |
+| `prescribe --source claude --apply`  | Apply Claude fixes automatically                        |
+| `prescribe --source codex --apply`   | Apply Codex fixes to rules, `config.toml`, `AGENTS.md`  |
+| `dashboard`                          | Web dashboard on localhost:7847 across all sources      |
+| `dashboard --source claude`          | Open dashboard with Claude as the default source        |
+| `dashboard --source codex`           | Open dashboard with Codex as the default source         |
+| `compare <p1> <p2>`                  | Side-by-side period comparison across all sources       |
+| `compare <p1> <p2> --source claude`  | Side-by-side period comparison for Claude metrics       |
+| `compare <p1> <p2> --source codex`   | Side-by-side period comparison for Codex metrics        |
+| `annotate "<desc>"`                  | Log a manual change event (tagged as global)            |
+| `annotate "<desc>" --source claude`  | Log a manual change event tagged to the Claude timeline |
+| `annotate "<desc>" --source codex`   | Log a manual change event tagged to the Codex timeline  |
+| `impact <id>`                        | Before/after analysis for a change across all sources   |
+| `impact <id> --source claude`        | Before/after analysis for Claude metrics                |
+| `impact <id> --source codex`         | Before/after analysis for Codex metrics                 |
+| `changes`                            | List all tracked changes                                |
+| `changes --source claude`            | List changes tagged to Claude plus global annotations   |
+| `changes --source codex`             | List changes tagged to Codex plus global annotations    |
 
 Source filters:
 
