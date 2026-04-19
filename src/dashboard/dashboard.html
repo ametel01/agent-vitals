@@ -9,6 +9,9 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 
+  <!-- Recharts UMD expects PropTypes as a global dependency -->
+  <script crossorigin src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+
   <!-- Recharts -->
   <script crossorigin src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
 
@@ -136,6 +139,18 @@
       min-width: 160px;
     }
 
+    .stat-card.interactive {
+      cursor: pointer;
+      position: relative;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .stat-card.interactive:hover,
+    .stat-card.interactive.active {
+      border-color: rgba(0,212,255,0.45);
+      box-shadow: 0 0 0 1px rgba(0,212,255,0.08);
+    }
+
     .stat-label {
       font-size: 10px;
       text-transform: uppercase;
@@ -148,6 +163,192 @@
       font-size: 22px;
       font-weight: 700;
       color: var(--accent);
+    }
+
+    .stat-hint {
+      color: var(--text-dim);
+      font-size: 10px;
+      margin-top: 4px;
+    }
+
+    .date-picker-popover {
+      position: absolute;
+      top: calc(100% + 10px);
+      left: 0;
+      z-index: 200;
+      width: min(620px, calc(100vw - 48px));
+      background: #151529;
+      border: 1px solid rgba(0,212,255,0.35);
+      border-radius: 8px;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.45);
+      padding: 14px;
+      cursor: default;
+    }
+
+    .date-picker-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .date-picker-title {
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .date-picker-nav,
+    .date-picker-button {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      color: var(--text);
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 11px;
+      padding: 6px 10px;
+    }
+
+    .date-picker-nav:hover,
+    .date-picker-button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .date-picker-button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #0f0f0f;
+      font-weight: 700;
+    }
+
+    .date-picker-button:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+
+    .date-picker-inputs {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .date-picker-inputs label {
+      color: var(--text-dim);
+      display: flex;
+      flex-direction: column;
+      font-size: 10px;
+      gap: 4px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .date-picker-inputs input {
+      background: var(--bg);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: inherit;
+      padding: 7px 8px;
+    }
+
+    .date-picker-inputs input:focus {
+      border-color: var(--accent);
+      outline: none;
+    }
+
+    .calendar-grid-wrap {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .calendar-month-title {
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 3px;
+    }
+
+    .calendar-weekday {
+      color: var(--text-dim);
+      font-size: 9px;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .calendar-day {
+      align-items: center;
+      aspect-ratio: 1;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: var(--text);
+      cursor: pointer;
+      display: flex;
+      font-family: inherit;
+      font-size: 11px;
+      justify-content: center;
+      min-width: 0;
+    }
+
+    .calendar-day:hover {
+      border-color: rgba(0,212,255,0.45);
+      color: var(--accent);
+    }
+
+    .calendar-day.in-range {
+      background: rgba(0,212,255,0.12);
+    }
+
+    .calendar-day.selected {
+      background: var(--accent);
+      color: #0f0f0f;
+      font-weight: 700;
+    }
+
+    .calendar-day.disabled {
+      color: rgba(136,136,136,0.35);
+      cursor: not-allowed;
+    }
+
+    .date-picker-actions {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .date-picker-action-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 700px) {
+      .date-picker-popover {
+        left: 50%;
+        transform: translateX(-50%);
+      }
+
+      .calendar-grid-wrap,
+      .date-picker-inputs {
+        grid-template-columns: 1fr;
+      }
     }
 
     /* Change timeline */
@@ -358,9 +559,39 @@
   </style>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root">
+    <div class="loading">
+      <div class="loading-spinner"></div>
+      <div style="color: var(--text-dim)">Loading dashboard...</div>
+      <noscript>
+        <div style="color: var(--red); margin-top: 8px">
+          JavaScript is required to render the dashboard.
+        </div>
+      </noscript>
+    </div>
+  </div>
 
   <script type="text/babel">
+    function renderBootError(message) {
+      const rootEl = document.getElementById('root');
+      if (!rootEl) return;
+      rootEl.innerHTML = `
+        <div class="loading">
+          <div style="color: var(--red); font-size: 16px">Dashboard failed to load</div>
+          <div style="color: var(--text-dim); margin-top: 8px">${message}</div>
+        </div>
+      `;
+    }
+
+    const missingDependencies = ['React', 'ReactDOM', 'PropTypes', 'Recharts']
+      .filter(name => !window[name]);
+
+    if (missingDependencies.length > 0) {
+      const message = `Missing browser dependency: ${missingDependencies.join(', ')}`;
+      renderBootError(message);
+      throw new Error(message);
+    }
+
     const {
       LineChart, Line, AreaChart, Area, BarChart, Bar,
       XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -455,6 +686,61 @@
       if (!dateStr) return '';
       const d = new Date(dateStr + 'T00:00:00');
       return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+
+    function toIsoDate(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    function parseIsoDate(dateStr) {
+      if (!dateStr) return null;
+      const [year, month, day] = dateStr.split('-').map(Number);
+      if (!year || !month || !day) return null;
+      return new Date(year, month - 1, day);
+    }
+
+    function addDays(dateStr, days) {
+      const date = parseIsoDate(dateStr);
+      if (!date) return '';
+      date.setDate(date.getDate() + days);
+      return toIsoDate(date);
+    }
+
+    function addMonths(date, months) {
+      return new Date(date.getFullYear(), date.getMonth() + months, 1);
+    }
+
+    function monthLabel(date) {
+      return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    }
+
+    function clampDate(dateStr, availableRange) {
+      if (!dateStr) return '';
+      if (availableRange && availableRange.min && dateStr < availableRange.min) return availableRange.min;
+      if (availableRange && availableRange.max && dateStr > availableRange.max) return availableRange.max;
+      return dateStr;
+    }
+
+    function normalizeRange(start, end) {
+      if (start && end && start > end) return { start: end, end: start };
+      return { start, end };
+    }
+
+    function buildCalendarDays(monthDate) {
+      const first = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+      const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
+      const days = [];
+
+      for (let i = 0; i < first.getDay(); i++) days.push(null);
+      for (let day = 1; day <= daysInMonth; day++) {
+        days.push(new Date(monthDate.getFullYear(), monthDate.getMonth(), day));
+      }
+      while (days.length % 7 !== 0) days.push(null);
+
+      return days;
     }
 
     // -----------------------------------------------------------------------
@@ -698,6 +984,176 @@
     }
 
     // -----------------------------------------------------------------------
+    // DateRangePicker
+    // -----------------------------------------------------------------------
+
+    function CalendarMonth({ monthDate, draftStart, draftEnd, availableRange, onSelectDate }) {
+      const weekdays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+      const days = buildCalendarDays(monthDate);
+
+      return (
+        <div>
+          <div className="calendar-month-title">{monthLabel(monthDate)}</div>
+          <div className="calendar-grid">
+            {weekdays.map((day, index) => (
+              <div key={`${day}-${index}`} className="calendar-weekday">{day}</div>
+            ))}
+            {days.map((date, index) => {
+              if (!date) return <div key={`empty-${index}`} />;
+              const iso = toIsoDate(date);
+              const disabled =
+                (availableRange && availableRange.min && iso < availableRange.min) ||
+                (availableRange && availableRange.max && iso > availableRange.max);
+              const selected = iso === draftStart || iso === draftEnd;
+              const inRange = draftStart && draftEnd && iso > draftStart && iso < draftEnd;
+
+              return (
+                <button
+                  key={iso}
+                  type="button"
+                  className={`calendar-day ${selected ? 'selected' : ''} ${inRange ? 'in-range' : ''} ${disabled ? 'disabled' : ''}`}
+                  disabled={disabled}
+                  onClick={() => onSelectDate(iso)}
+                >
+                  {date.getDate()}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    function DateRangePicker({ dateRange, availableRange, onApply, onClear, onClose }) {
+      const initialStart = dateRange.start || (availableRange && availableRange.min) || '';
+      const initialEnd = dateRange.end || (availableRange && availableRange.max) || '';
+      const initialMonth = parseIsoDate(initialStart || initialEnd) || new Date();
+      const [draftStart, setDraftStart] = React.useState(initialStart);
+      const [draftEnd, setDraftEnd] = React.useState(initialEnd);
+      const [visibleMonth, setVisibleMonth] = React.useState(
+        new Date(initialMonth.getFullYear(), initialMonth.getMonth(), 1),
+      );
+
+      function selectDate(date) {
+        if (!draftStart || (draftStart && draftEnd)) {
+          setDraftStart(date);
+          setDraftEnd('');
+          return;
+        }
+
+        const next = normalizeRange(draftStart, date);
+        setDraftStart(next.start);
+        setDraftEnd(next.end);
+      }
+
+      function setPreset(days) {
+        const end = (availableRange && availableRange.max) || toIsoDate(new Date());
+        const start = clampDate(addDays(end, -(days - 1)), availableRange);
+        setDraftStart(start);
+        setDraftEnd(end);
+        const parsed = parseIsoDate(start);
+        if (parsed) setVisibleMonth(new Date(parsed.getFullYear(), parsed.getMonth(), 1));
+      }
+
+      function applyRange() {
+        const next = normalizeRange(
+          clampDate(draftStart, availableRange),
+          clampDate(draftEnd, availableRange),
+        );
+        onApply(next);
+      }
+
+      return (
+        <div className="date-picker-popover" onClick={(event) => event.stopPropagation()}>
+          <div className="date-picker-header">
+            <button
+              className="date-picker-nav"
+              type="button"
+              onClick={() => setVisibleMonth(addMonths(visibleMonth, -1))}
+            >
+              Prev
+            </button>
+            <div className="date-picker-title">Filter by date range</div>
+            <button
+              className="date-picker-nav"
+              type="button"
+              onClick={() => setVisibleMonth(addMonths(visibleMonth, 1))}
+            >
+              Next
+            </button>
+          </div>
+
+          <div className="date-picker-inputs">
+            <label>
+              Start
+              <input
+                type="date"
+                value={draftStart}
+                min={availableRange && availableRange.min ? availableRange.min : undefined}
+                max={availableRange && availableRange.max ? availableRange.max : undefined}
+                onChange={(event) => setDraftStart(clampDate(event.target.value, availableRange))}
+              />
+            </label>
+            <label>
+              End
+              <input
+                type="date"
+                value={draftEnd}
+                min={availableRange && availableRange.min ? availableRange.min : undefined}
+                max={availableRange && availableRange.max ? availableRange.max : undefined}
+                onChange={(event) => setDraftEnd(clampDate(event.target.value, availableRange))}
+              />
+            </label>
+          </div>
+
+          <div className="calendar-grid-wrap">
+            <CalendarMonth
+              monthDate={visibleMonth}
+              draftStart={draftStart}
+              draftEnd={draftEnd}
+              availableRange={availableRange}
+              onSelectDate={selectDate}
+            />
+            <CalendarMonth
+              monthDate={addMonths(visibleMonth, 1)}
+              draftStart={draftStart}
+              draftEnd={draftEnd}
+              availableRange={availableRange}
+              onSelectDate={selectDate}
+            />
+          </div>
+
+          <div className="date-picker-actions">
+            <div className="date-picker-action-group">
+              <button className="date-picker-button" type="button" onClick={() => setPreset(7)}>
+                Last 7d
+              </button>
+              <button className="date-picker-button" type="button" onClick={() => setPreset(30)}>
+                Last 30d
+              </button>
+              <button className="date-picker-button" type="button" onClick={onClear}>
+                All
+              </button>
+            </div>
+            <div className="date-picker-action-group">
+              <button className="date-picker-button" type="button" onClick={onClose}>
+                Cancel
+              </button>
+              <button
+                className="date-picker-button primary"
+                type="button"
+                disabled={!draftStart || !draftEnd}
+                onClick={applyRange}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
     // App
     // -----------------------------------------------------------------------
 
@@ -713,13 +1169,19 @@
       const [loading, setLoading] = React.useState(true);
       const [error, setError] = React.useState(null);
       const [activeChange, setActiveChange] = React.useState(null);
+      const [dateRange, setDateRange] = React.useState({ start: '', end: '' });
+      const [availableRange, setAvailableRange] = React.useState(null);
+      const [datePickerOpen, setDatePickerOpen] = React.useState(false);
 
       React.useEffect(() => {
         let cancelled = false;
         setLoading(true);
         setError(null);
         setActiveChange(null);
-        const qs = `?source=${encodeURIComponent(source || 'all')}`;
+        const params = new URLSearchParams({ source: source || 'all' });
+        if (dateRange.start) params.set('start', dateRange.start);
+        if (dateRange.end) params.set('end', dateRange.end);
+        const qs = `?${params.toString()}`;
         Promise.all([
           fetch(`/api/metrics${qs}`).then(r => r.json()),
           fetch(`/api/changes${qs}`).then(r => r.json()),
@@ -732,6 +1194,11 @@
             setChanges(c);
             setHealth(h);
             setSessions(s);
+            if (!dateRange.start && !dateRange.end && s.dateRange) {
+              setAvailableRange(s.dateRange);
+            } else if (!availableRange && s.dateRange) {
+              setAvailableRange(s.dateRange);
+            }
             setLoading(false);
           })
           .catch(err => {
@@ -740,7 +1207,7 @@
             setLoading(false);
           });
         return () => { cancelled = true; };
-      }, [source]);
+      }, [source, dateRange.start, dateRange.end]);
 
       if (loading) {
         return (
@@ -769,6 +1236,11 @@
       const activeChangeDate = activeChange
         ? activeChange.timestamp.substring(0, 10)
         : null;
+      const activeDateFilter = Boolean(dateRange.start || dateRange.end);
+      const displayDateRange = {
+        min: dateRange.start || (sessions && sessions.dateRange ? sessions.dateRange.min : null),
+        max: dateRange.end || (sessions && sessions.dateRange ? sessions.dateRange.max : null),
+      };
 
       return (
         <div>
@@ -803,13 +1275,34 @@
               <div className="stat-label">Tool Calls</div>
               <div className="stat-value">{sessions ? sessions.toolCalls.toLocaleString() : '--'}</div>
             </div>
-            <div className="stat-card">
+            <div
+              className={`stat-card interactive ${activeDateFilter ? 'active' : ''}`}
+              onClick={() => setDatePickerOpen(true)}
+            >
               <div className="stat-label">Date Range</div>
               <div className="stat-value" style={{ fontSize: 14 }}>
-                {sessions && sessions.dateRange && sessions.dateRange.min
-                  ? `${formatDate(sessions.dateRange.min)} - ${formatDate(sessions.dateRange.max)}`
+                {displayDateRange.min
+                  ? `${formatDate(displayDateRange.min)} - ${formatDate(displayDateRange.max)}`
                   : '--'}
               </div>
+              <div className="stat-hint">
+                {activeDateFilter ? 'Filtered. Click to change.' : 'Click to filter.'}
+              </div>
+              {datePickerOpen && (
+                <DateRangePicker
+                  dateRange={dateRange}
+                  availableRange={availableRange || (sessions ? sessions.dateRange : null)}
+                  onApply={(next) => {
+                    setDateRange(next);
+                    setDatePickerOpen(false);
+                  }}
+                  onClear={() => {
+                    setDateRange({ start: '', end: '' });
+                    setDatePickerOpen(false);
+                  }}
+                  onClose={() => setDatePickerOpen(false)}
+                />
+              )}
             </div>
             <div className="stat-card">
               <div className="stat-label">Alerts</div>

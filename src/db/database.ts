@@ -31,6 +31,7 @@ type DashboardMetricRow = {
   value: number;
   detail: string | null;
 };
+type DateFilter = { startDate?: string; endDate?: string };
 
 function getDefaultDbPath(): string {
   const dir = path.join(os.homedir(), '.agent-vitals');
@@ -600,19 +601,28 @@ export class VitalsDB {
       .get(metricName, provider) as LatestMetricRow | undefined;
   }
 
-  getAllChanges(provider: string = '_all'): ChangeRow[] {
+  getAllChanges(provider: string = '_all', dateFilter: DateFilter = {}): ChangeRow[] {
+    const params: SqlParam[] = [];
+    let sql = 'SELECT id, timestamp, type, description, provider FROM changes WHERE 1 = 1';
+
     if (provider === '_all') {
-      return this.db
-        .prepare(
-          'SELECT id, timestamp, type, description, provider FROM changes ORDER BY timestamp DESC',
-        )
-        .all() as ChangeRow[];
+      // Keep all providers.
+    } else {
+      sql += " AND (provider = ? OR provider = '_all')";
+      params.push(provider);
     }
-    return this.db
-      .prepare(
-        "SELECT id, timestamp, type, description, provider FROM changes WHERE provider = ? OR provider = '_all' ORDER BY timestamp DESC",
-      )
-      .all(provider) as ChangeRow[];
+
+    if (dateFilter.startDate) {
+      sql += ' AND substr(timestamp, 1, 10) >= ?';
+      params.push(dateFilter.startDate);
+    }
+    if (dateFilter.endDate) {
+      sql += ' AND substr(timestamp, 1, 10) <= ?';
+      params.push(dateFilter.endDate);
+    }
+
+    sql += ' ORDER BY timestamp DESC';
+    return this.db.prepare(sql).all(...params) as ChangeRow[];
   }
 
   getImpactResults(changeId: number, provider: string = '_all'): ImpactResultRow[] {
@@ -630,45 +640,74 @@ export class VitalsDB {
       .all(changeId, provider) as ImpactResultRow[];
   }
 
-  getSessionCount(provider: string = '_all'): number {
-    if (provider === '_all') {
-      return (this.db.prepare('SELECT COUNT(*) as c FROM sessions').get() as CountRow).c;
+  getSessionCount(provider: string = '_all', dateFilter: DateFilter = {}): number {
+    const params: SqlParam[] = [];
+    let sql = 'SELECT COUNT(*) as c FROM sessions WHERE 1 = 1';
+
+    if (provider !== '_all') {
+      sql += ' AND provider = ?';
+      params.push(provider);
     }
-    return (
-      this.db
-        .prepare('SELECT COUNT(*) as c FROM sessions WHERE provider = ?')
-        .get(provider) as CountRow
-    ).c;
+
+    const sessionDate = 'substr(COALESCE(started_at, ended_at, scanned_at), 1, 10)';
+    if (dateFilter.startDate) {
+      sql += ` AND ${sessionDate} >= ?`;
+      params.push(dateFilter.startDate);
+    }
+    if (dateFilter.endDate) {
+      sql += ` AND ${sessionDate} <= ?`;
+      params.push(dateFilter.endDate);
+    }
+
+    return (this.db.prepare(sql).get(...params) as CountRow).c;
   }
 
-  getToolCallCount(provider: string = '_all'): number {
-    if (provider === '_all') {
-      return (this.db.prepare('SELECT COUNT(*) as c FROM tool_calls').get() as CountRow).c;
+  getToolCallCount(provider: string = '_all', dateFilter: DateFilter = {}): number {
+    const params: SqlParam[] = [];
+    let sql = `
+      SELECT COUNT(*) as c
+      FROM tool_calls tc
+      JOIN sessions s ON tc.session_id = s.id
+      WHERE 1 = 1
+    `;
+
+    if (provider !== '_all') {
+      sql += ' AND s.provider = ?';
+      params.push(provider);
     }
-    return (
-      this.db
-        .prepare(
-          `
-          SELECT COUNT(*) as c
-          FROM tool_calls tc
-          JOIN sessions s ON tc.session_id = s.id
-          WHERE s.provider = ?
-          `,
-        )
-        .get(provider) as CountRow
-    ).c;
+
+    const toolDate =
+      'substr(COALESCE(tc.timestamp, s.started_at, s.ended_at, s.scanned_at), 1, 10)';
+    if (dateFilter.startDate) {
+      sql += ` AND ${toolDate} >= ?`;
+      params.push(dateFilter.startDate);
+    }
+    if (dateFilter.endDate) {
+      sql += ` AND ${toolDate} <= ?`;
+      params.push(dateFilter.endDate);
+    }
+
+    return (this.db.prepare(sql).get(...params) as CountRow).c;
   }
 
-  getDateRange(provider: string = '_all'): DateRangeRow | undefined {
-    return this.db
-      .prepare(
-        `
+  getDateRange(provider: string = '_all', dateFilter: DateFilter = {}): DateRangeRow | undefined {
+    const params: SqlParam[] = [provider];
+    let sql = `
         SELECT MIN(date) as min, MAX(date) as max
         FROM daily_metrics
         WHERE provider = ? AND model = '_all' AND project_path = '_all'
-        `,
-      )
-      .get(provider) as DateRangeRow | undefined;
+    `;
+
+    if (dateFilter.startDate) {
+      sql += ' AND date >= ?';
+      params.push(dateFilter.startDate);
+    }
+    if (dateFilter.endDate) {
+      sql += ' AND date <= ?';
+      params.push(dateFilter.endDate);
+    }
+
+    return this.db.prepare(sql).get(...params) as DateRangeRow | undefined;
   }
 
   getAllMetricNames(): string[] {
@@ -682,18 +721,31 @@ export class VitalsDB {
   getAllDailyMetricsForDashboard(
     days: number = 90,
     provider: string = '_all',
+    dateFilter: DateFilter = {},
   ): DashboardMetricRow[] {
-    return this.db
-      .prepare(
-        `
+    const params: SqlParam[] = [];
+    let sql = `
       SELECT date, metric_name, metric_value as value, metric_detail as detail
       FROM daily_metrics
-      WHERE date >= date('now', ?)
-        AND provider = ? AND model = '_all' AND project_path = '_all'
-      ORDER BY date ASC, metric_name ASC
-    `,
-      )
-      .all(`-${days} days`, provider) as DashboardMetricRow[];
+      WHERE provider = ? AND model = '_all' AND project_path = '_all'
+    `;
+    params.push(provider);
+
+    if (dateFilter.startDate) {
+      sql += ' AND date >= ?';
+      params.push(dateFilter.startDate);
+    } else {
+      sql += " AND date >= date('now', ?)";
+      params.push(`-${days} days`);
+    }
+
+    if (dateFilter.endDate) {
+      sql += ' AND date <= ?';
+      params.push(dateFilter.endDate);
+    }
+
+    sql += ' ORDER BY date ASC, metric_name ASC';
+    return this.db.prepare(sql).all(...params) as DashboardMetricRow[];
   }
 
   getProvidersInSessions(): string[] {

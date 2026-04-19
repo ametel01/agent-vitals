@@ -17,6 +17,11 @@ function resolveSourceParam(source: string | null, defaultProvider: string): str
   return defaultProvider;
 }
 
+function resolveDateParam(date: string | null): string | undefined {
+  if (!date) return undefined;
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : undefined;
+}
+
 function resolveHtmlPath(): string {
   // First try next to the compiled JS (dist/dashboard/dashboard.html)
   const nextToCompiled = path.join(__dirname, 'dashboard.html');
@@ -46,6 +51,10 @@ export function serveDashboard(db: VitalsDB, port: number, defaultProvider: stri
     const parsedUrl = new URL(url, `http://localhost:${port}`);
     const pathname = parsedUrl.pathname;
     const provider = resolveSourceParam(parsedUrl.searchParams.get('source'), defaultProvider);
+    const dateFilter = {
+      startDate: resolveDateParam(parsedUrl.searchParams.get('start')),
+      endDate: resolveDateParam(parsedUrl.searchParams.get('end')),
+    };
 
     try {
       if (pathname === '/' || pathname === '/index.html') {
@@ -60,14 +69,14 @@ export function serveDashboard(db: VitalsDB, port: number, defaultProvider: stri
       }
 
       if (pathname === '/api/metrics') {
-        const metrics = db.getAllDailyMetricsForDashboard(90, provider);
+        const metrics = db.getAllDailyMetricsForDashboard(90, provider, dateFilter);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(metrics));
         return;
       }
 
       if (pathname === '/api/changes') {
-        const changes = db.getAllChanges(provider);
+        const changes = db.getAllChanges(provider, dateFilter);
         const changesWithImpact = changes.map((change) => ({
           ...change,
           impacts: db.getImpactResults(change.id, provider),
@@ -87,9 +96,9 @@ export function serveDashboard(db: VitalsDB, port: number, defaultProvider: stri
 
       if (pathname === '/api/sessions') {
         const data = {
-          count: db.getSessionCount(provider),
-          toolCalls: db.getToolCallCount(provider),
-          dateRange: db.getDateRange(provider),
+          count: db.getSessionCount(provider, dateFilter),
+          toolCalls: db.getToolCallCount(provider, dateFilter),
+          dateRange: db.getDateRange(provider, dateFilter),
           providers: db.getProvidersInSessions(),
         };
         res.writeHead(200, { 'Content-Type': 'application/json' });
