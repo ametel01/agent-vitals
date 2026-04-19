@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { VitalsDB } from '../db/database';
-import { CODEX_KNOWN_FIXES } from './codex-known-fixes';
+import { CODEX_BASELINE, CODEX_KNOWN_FIXES } from './codex-known-fixes';
 import { BASELINE_SETTINGS, KNOWN_FIXES, type PrescriptionTemplate } from './known-fixes';
 
 export interface Prescription {
@@ -95,6 +95,10 @@ export class Prescriber {
 
   getBaselineRecommendations(): PrescriptionTemplate[] {
     return BASELINE_SETTINGS;
+  }
+
+  getCodexBaselineRecommendations(): PrescriptionTemplate[] {
+    return CODEX_BASELINE;
   }
 
   generateSettingsJson(prescriptions: Prescription[]): Record<string, unknown> {
