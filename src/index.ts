@@ -11,6 +11,7 @@ import { RegressionDetector } from './regression/detector';
 import { MarkdownReport } from './reports/markdown';
 import { TerminalReport } from './reports/terminal';
 import { ClaudeAdapter } from './scanner/claude-adapter';
+import { CodexAdapter } from './scanner/codex-adapter';
 import { Scanner, type SourceFilter } from './scanner/scanner';
 
 const program = new Command();
@@ -22,7 +23,7 @@ program
 
 // --- scan ---
 function createSessionAdapters() {
-  return [new ClaudeAdapter()];
+  return [new ClaudeAdapter(), new CodexAdapter()];
 }
 
 program
@@ -30,7 +31,7 @@ program
   .description('Ingest agent session logs into the database')
   .option('-f, --force', 'Re-scan all sessions, even previously scanned ones')
   .option('-v, --verbose', 'Show detailed progress')
-  .option('--source <source>', 'Session source: claude or all', 'claude')
+  .option('--source <source>', 'Session source: claude, codex, or all', 'claude')
   .option('--db <path>', 'Custom database path')
   .action((opts) => {
     const source = opts.source as string;
