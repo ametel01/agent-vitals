@@ -168,7 +168,8 @@ CREATE TABLE IF NOT EXISTS changes (
   file_path TEXT,
   file_hash TEXT,
   content_snapshot TEXT,
-  word_count INTEGER
+  word_count INTEGER,
+  provider TEXT NOT NULL DEFAULT 'claude'
 );
 
 -- Impact analysis results
@@ -180,6 +181,7 @@ CREATE TABLE IF NOT EXISTS impact_results (
   after_value REAL,
   change_pct REAL,
   verdict TEXT,                -- improved, degraded, stable
+  provider TEXT NOT NULL DEFAULT '_all',
   FOREIGN KEY (change_id) REFERENCES changes(id)
 );
 

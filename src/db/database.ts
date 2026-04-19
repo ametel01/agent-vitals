@@ -8,7 +8,13 @@ type SqlParam = string | number | null;
 type DailyMetricRow = { date: string; value: number; detail: string | null };
 type DateValueRow = { date: string; value: number };
 type LatestMetricRow = { date: string; value: number };
-type ChangeRow = { id: number; timestamp: string; type: string; description: string };
+type ChangeRow = {
+  id: number;
+  timestamp: string;
+  type: string;
+  description: string;
+  provider: string;
+};
 type ImpactResultRow = {
   metric_name: string;
   before_value: number;
@@ -53,6 +59,8 @@ export class VitalsDB {
     this.addColumnIfMissing('sessions', 'source_mtime_ms', 'INTEGER');
     this.addColumnIfMissing('sessions', 'source_size_bytes', 'INTEGER');
     this.addColumnIfMissing('sessions', 'provider', "TEXT NOT NULL DEFAULT 'claude'");
+    this.addColumnIfMissing('changes', 'provider', "TEXT NOT NULL DEFAULT 'claude'");
+    this.addColumnIfMissing('impact_results', 'provider', "TEXT NOT NULL DEFAULT '_all'");
     this.migrateDailyMetricsProvider();
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_tool_calls_call_id ON tool_calls(tool_call_id);');
     this.db.exec(
@@ -60,6 +68,10 @@ export class VitalsDB {
     );
     this.db.exec(
       'CREATE INDEX IF NOT EXISTS idx_daily_metrics_provider ON daily_metrics(provider);',
+    );
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_changes_provider ON changes(provider);');
+    this.db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_impact_results_provider ON impact_results(provider);',
     );
   }
 
@@ -484,10 +496,11 @@ export class VitalsDB {
     file_hash?: string;
     content_snapshot?: string;
     word_count?: number;
+    provider?: string;
   }): number {
     const stmt = this.db.prepare(`
-      INSERT INTO changes (timestamp, type, description, file_path, file_hash, content_snapshot, word_count)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO changes (timestamp, type, description, file_path, file_hash, content_snapshot, word_count, provider)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const r = stmt.run(
       c.timestamp,
@@ -497,6 +510,7 @@ export class VitalsDB {
       c.file_hash || null,
       c.content_snapshot || null,
       c.word_count || null,
+      c.provider || 'claude',
     );
     return Number(r.lastInsertRowid);
   }
@@ -509,10 +523,11 @@ export class VitalsDB {
     after_value: number;
     change_pct: number;
     verdict: string;
+    provider?: string;
   }) {
     const stmt = this.db.prepare(`
-      INSERT INTO impact_results (change_id, metric_name, before_value, after_value, change_pct, verdict)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO impact_results (change_id, metric_name, before_value, after_value, change_pct, verdict, provider)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run(
       ir.change_id,
@@ -521,6 +536,7 @@ export class VitalsDB {
       ir.after_value,
       ir.change_pct,
       ir.verdict,
+      ir.provider || '_all',
     );
   }
 
@@ -584,18 +600,34 @@ export class VitalsDB {
       .get(metricName, provider) as LatestMetricRow | undefined;
   }
 
-  getAllChanges(): ChangeRow[] {
-    return this.db
-      .prepare('SELECT id, timestamp, type, description FROM changes ORDER BY timestamp DESC')
-      .all() as ChangeRow[];
-  }
-
-  getImpactResults(changeId: number): ImpactResultRow[] {
+  getAllChanges(provider: string = '_all'): ChangeRow[] {
+    if (provider === '_all') {
+      return this.db
+        .prepare(
+          'SELECT id, timestamp, type, description, provider FROM changes ORDER BY timestamp DESC',
+        )
+        .all() as ChangeRow[];
+    }
     return this.db
       .prepare(
-        'SELECT metric_name, before_value, after_value, change_pct, verdict FROM impact_results WHERE change_id = ?',
+        "SELECT id, timestamp, type, description, provider FROM changes WHERE provider = ? OR provider = '_all' ORDER BY timestamp DESC",
       )
-      .all(changeId) as ImpactResultRow[];
+      .all(provider) as ChangeRow[];
+  }
+
+  getImpactResults(changeId: number, provider: string = '_all'): ImpactResultRow[] {
+    if (provider === '_all') {
+      return this.db
+        .prepare(
+          'SELECT metric_name, before_value, after_value, change_pct, verdict FROM impact_results WHERE change_id = ?',
+        )
+        .all(changeId) as ImpactResultRow[];
+    }
+    return this.db
+      .prepare(
+        'SELECT metric_name, before_value, after_value, change_pct, verdict FROM impact_results WHERE change_id = ? AND provider = ?',
+      )
+      .all(changeId, provider) as ImpactResultRow[];
   }
 
   getSessionCount(provider: string = '_all'): number {
