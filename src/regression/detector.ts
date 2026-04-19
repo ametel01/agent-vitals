@@ -2,6 +2,7 @@ import type { VitalsDB } from '../db/database';
 
 export interface RegressionAlert {
   metric: string;
+  models: string[];
   current: number;
   previous: number;
   changePct: number;
@@ -176,39 +177,28 @@ export class RegressionDetector {
       const currentAvg = this.average(currentRows.map((r) => r.value));
       const previousAvg = this.average(previousRows.map((r) => r.value));
 
-      // Compute the change value depending on mode
-      let changeValue: number;
-      if (config.mode === 'pct') {
-        // Percentage change relative to previous value
-        if (previousAvg === 0) {
-          changeValue = currentAvg === 0 ? 0 : 100;
-        } else {
-          changeValue = ((currentAvg - previousAvg) / previousAvg) * 100;
-        }
-      } else {
-        // Absolute difference in percentage points
-        changeValue = currentAvg - previousAvg;
-      }
-
-      // Determine if the change is in the bad direction
-      let badMagnitude: number;
-      if (config.direction === 'drop') {
-        // Bad when value drops (changeValue is negative)
-        badMagnitude = -changeValue; // positive when dropping
-      } else {
-        // Bad when value rises (changeValue is positive)
-        badMagnitude = changeValue; // positive when rising
-      }
+      const regression = this.evaluateRegression(currentAvg, previousAvg, config);
+      const changeValue = regression.changeValue;
+      const badMagnitude = regression.badMagnitude;
 
       // Skip if the change is not in the bad direction
       if (badMagnitude <= 0) continue;
 
       const label = METRIC_LABELS[metric] || metric;
+      const models = this.getRegressedModels(
+        metric,
+        currentStart,
+        currentEnd,
+        previousStart,
+        previousEnd,
+        config,
+      );
 
       // Check critical first, then warning
       if (badMagnitude >= config.critical) {
         alerts.push({
           metric,
+          models,
           current: round2(currentAvg),
           previous: round2(previousAvg),
           changePct: round2(changeValue),
@@ -219,6 +209,7 @@ export class RegressionDetector {
       } else if (badMagnitude >= config.warning) {
         alerts.push({
           metric,
+          models,
           current: round2(currentAvg),
           previous: round2(previousAvg),
           changePct: round2(changeValue),
@@ -274,6 +265,80 @@ export class RegressionDetector {
     if (values.length === 0) return 0;
     const sum = values.reduce((acc, v) => acc + v, 0);
     return sum / values.length;
+  }
+
+  private evaluateRegression(
+    currentAvg: number,
+    previousAvg: number,
+    config: ThresholdConfig,
+  ): { changeValue: number; badMagnitude: number } {
+    let changeValue: number;
+    if (config.mode === 'pct') {
+      if (previousAvg === 0) {
+        changeValue = currentAvg === 0 ? 0 : 100;
+      } else {
+        changeValue = ((currentAvg - previousAvg) / previousAvg) * 100;
+      }
+    } else {
+      changeValue = currentAvg - previousAvg;
+    }
+
+    const badMagnitude = config.direction === 'drop' ? -changeValue : changeValue;
+    return { changeValue, badMagnitude };
+  }
+
+  private getRegressedModels(
+    metric: string,
+    currentStart: string,
+    currentEnd: string,
+    previousStart: string,
+    previousEnd: string,
+    config: ThresholdConfig,
+  ): string[] {
+    const currentRows = this.db.getMetricForDateRangeByModel(
+      metric,
+      currentStart,
+      currentEnd,
+      this.provider,
+    );
+    const previousRows = this.db.getMetricForDateRangeByModel(
+      metric,
+      previousStart,
+      previousEnd,
+      this.provider,
+    );
+    if (currentRows.length === 0 || previousRows.length === 0) {
+      const contributors = this.db.getContributingModelsForMetric(
+        metric,
+        currentStart,
+        currentEnd,
+        this.provider,
+      );
+      return contributors.length > 0 ? contributors : ['Aggregate (_all)'];
+    }
+
+    const models = new Set([...currentRows, ...previousRows].map((r) => r.model));
+    const regressed: string[] = [];
+    for (const model of models) {
+      const currentValues = currentRows.filter((r) => r.model === model).map((r) => r.value);
+      const previousValues = previousRows.filter((r) => r.model === model).map((r) => r.value);
+      if (currentValues.length === 0 || previousValues.length === 0) continue;
+
+      const currentAvg = this.average(currentValues);
+      const previousAvg = this.average(previousValues);
+      const { badMagnitude } = this.evaluateRegression(currentAvg, previousAvg, config);
+      if (badMagnitude >= config.warning) regressed.push(model);
+    }
+
+    if (regressed.length > 0) return regressed.sort();
+
+    const contributors = this.db.getContributingModelsForMetric(
+      metric,
+      currentStart,
+      currentEnd,
+      this.provider,
+    );
+    return contributors.length > 0 ? contributors : ['Aggregate (_all)'];
   }
 
   private fmtDate(d: Date): string {
