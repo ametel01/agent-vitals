@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Claude Vitals Dashboard</title>
+  <title>Agent Vitals Dashboard</title>
 
   <!-- React 18 -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -736,7 +736,7 @@
         <div>
           {/* Top Bar */}
           <div className="topbar">
-            <div className="topbar-title">CLAUDE VITALS</div>
+            <div className="topbar-title">AGENT VITALS</div>
             <div className={`health-badge ${healthStatus}`}>
               <div className={`health-dot ${healthStatus}`} />
               {healthStatus === 'green' ? 'Healthy' : healthStatus === 'yellow' ? 'Warning' : 'Critical'}
@@ -830,7 +830,7 @@
 
           {/* Footer */}
           <div style={{ textAlign: 'center', padding: '24px', color: COLORS.dimText, fontSize: 11 }}>
-            Claude Vitals Dashboard &middot; Data refreshed on page load
+            Agent Vitals Dashboard &middot; Data refreshed on page load
           </div>
         </div>
       );
