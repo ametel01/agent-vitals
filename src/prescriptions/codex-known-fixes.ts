@@ -1,4 +1,28 @@
-import type { KnownFix } from './known-fixes';
+import type { KnownFix, PrescriptionTemplate } from './known-fixes';
+
+export const CODEX_BASELINE: PrescriptionTemplate[] = [
+  {
+    type: 'codex_rules',
+    key: '~/.codex/rules/read-before-edit.rules',
+    value:
+      'For every code edit, read the target file and at least one related caller, test, or type definition before using apply_patch.',
+    description: 'Baseline read-before-edit rule',
+  },
+  {
+    type: 'codex_rules',
+    key: '~/.codex/rules/verify-shell.rules',
+    value:
+      'Before shell commands, verify cwd and command syntax. After a failure, read the full error and change approach instead of retrying.',
+    description: 'Baseline shell verification rule',
+  },
+  {
+    type: 'project_instructions',
+    key: 'AGENTS.md',
+    value:
+      'Finish all requested parts before stopping. Validate results before reporting completion.',
+    description: 'Baseline task-completion instruction',
+  },
+];
 
 export const CODEX_KNOWN_FIXES: KnownFix[] = [
   {
