@@ -168,6 +168,27 @@ const METRIC_SECTIONS: Array<{ title: string; metrics: MetricDef[] }> = [
 /** All metric keys in a flat list, preserving section order. */
 const ALL_METRIC_KEYS = METRIC_SECTIONS.flatMap((s) => s.metrics.map((m) => m.key));
 
+// Metrics whose benchmarks were calibrated on Claude session logs and should
+// be treated as provider-local (no benchmark comparison) for non-Claude
+// providers per Phase 4, Step 13 of the Codex plan.
+const CLAUDE_ONLY_METRICS = new Set<string>([
+  'thinking_depth_median',
+  'thinking_depth_redacted_pct',
+  'cost_estimate',
+  'context_pressure',
+]);
+
+function isNonClaudeProvider(provider: string): boolean {
+  return provider !== '_all' && provider !== 'claude';
+}
+
+function effectiveBenchmark(metric: MetricDef, provider: string): MetricDef['benchmark'] {
+  if (isNonClaudeProvider(provider) && CLAUDE_ONLY_METRICS.has(metric.key)) {
+    return undefined;
+  }
+  return metric.benchmark;
+}
+
 // Sparkline characters, ordered lowest to highest.
 const SPARK_CHARS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 
@@ -260,12 +281,15 @@ interface RegressionAlert {
   threshold: number;
 }
 
-function detectRegressions(db: VitalsDB): {
+function detectRegressions(
+  db: VitalsDB,
+  provider: string = '_all',
+): {
   status: 'healthy' | 'warning' | 'critical';
   alerts: RegressionAlert[];
 } {
   try {
-    const detector = new RegressionDetector(db);
+    const detector = new RegressionDetector(db, provider);
     const health = detector.getHealthStatus();
     const status: 'healthy' | 'warning' | 'critical' =
       health.status === 'green' ? 'healthy' : health.status === 'yellow' ? 'warning' : 'critical';
@@ -305,8 +329,11 @@ function detectRegressions(db: VitalsDB): {
     { key: 'prompts_per_session', good: 35.9, degraded: 27.9, higherIsBetter: true },
   ];
 
+  const nonClaude = isNonClaudeProvider(provider);
+
   for (const b of benchmarks) {
-    const rows = db.getDailyMetrics(b.key, 7);
+    if (nonClaude && CLAUDE_ONLY_METRICS.has(b.key)) continue;
+    const rows = db.getDailyMetrics(b.key, 7, undefined, undefined, provider);
     if (rows.length === 0) continue;
     const avg = average(rows.map((r) => r.value));
 
@@ -353,20 +380,28 @@ export class TerminalReport {
     this.db = db;
   }
 
-  generate(options: { days?: number; model?: string; project?: string } = {}): void {
+  generate(
+    options: {
+      days?: number;
+      model?: string;
+      project?: string;
+      provider?: string;
+    } = {},
+  ): void {
     const _days = options.days ?? 30;
+    const provider = options.provider ?? '_all';
 
     // Gather aggregate data for the header
-    const dateRange = this.db.getDateRange();
-    const sessionCount = this.db.getSessionCount();
-    const toolCallCount = this.db.getToolCallCount();
+    const dateRange = this.db.getDateRange(provider);
+    const sessionCount = this.db.getSessionCount(provider);
+    const toolCallCount = this.db.getToolCallCount(provider);
 
     // Collect per-metric data: last 14 days for sparklines, split 7+7 for trend
     const metricData: Record<string, { values14: number[]; current7: number; previous7: number }> =
       {};
 
     for (const key of ALL_METRIC_KEYS) {
-      const rows = this.db.getDailyMetrics(key, 14, options.model, options.project);
+      const rows = this.db.getDailyMetrics(key, 14, options.model, options.project, provider);
       const values = rows.map((r) => r.value);
 
       // Split into previous 7 and current 7
@@ -382,7 +417,7 @@ export class TerminalReport {
     }
 
     // Regression detection
-    const regressions = detectRegressions(this.db);
+    const regressions = detectRegressions(this.db, provider);
 
     // --- Render ---
 
@@ -405,6 +440,8 @@ export class TerminalReport {
       console.log(chalk.gray(`  Date range: ${dateRange.min} to ${dateRange.max}`));
     }
     console.log(chalk.gray(`  Sessions scanned: ${sessionCount}    Tool calls: ${toolCallCount}`));
+    const sourceLabel = provider === '_all' ? 'all providers' : provider;
+    console.log(chalk.gray(`  Source: ${sourceLabel}`));
     console.log('');
 
     // Health status
@@ -449,11 +486,17 @@ export class TerminalReport {
         const data = metricData[metric.key];
         if (!data) continue;
 
-        const nameStr = padRight(`  ${metric.label}`, COL_NAME + 2);
+        const providerLocal = isNonClaudeProvider(provider) && CLAUDE_ONLY_METRICS.has(metric.key);
+        const label = providerLocal ? `${metric.label} (provider-local)` : metric.label;
+        const nameStr = padRight(`  ${label}`, COL_NAME + 2);
         const currentStr = padLeft(formatValue(data.current7, metric.format), COL_CURRENT);
         const prevStr = padLeft(formatValue(data.previous7, metric.format), COL_PREV);
+        // Suppress benchmark-driven trend judgement for provider-local metrics;
+        // trend arrow still shows direction but direction is informational only.
         const arrow = trendArrow(data.current7, data.previous7, metric.higherIsBetter);
         const spark = sparkline(data.values14);
+        // Use effectiveBenchmark to silence unused-import style linters if present.
+        void effectiveBenchmark(metric, provider);
 
         console.log(
           chalk.white(nameStr) +

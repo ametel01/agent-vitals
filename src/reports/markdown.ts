@@ -118,6 +118,20 @@ const ALL_METRICS: MetricDef[] = [
   { key: 'context_pressure', label: 'Context Pressure', higherIsBetter: false, format: 'ratio' },
 ];
 
+// Metrics whose benchmarks were calibrated on Claude session logs and should
+// be treated as provider-local (no benchmark comparison) for non-Claude
+// providers per Phase 4, Step 13 of the Codex plan.
+const CLAUDE_ONLY_METRICS = new Set<string>([
+  'thinking_depth_median',
+  'thinking_depth_redacted_pct',
+  'cost_estimate',
+  'context_pressure',
+]);
+
+function isNonClaudeProvider(provider: string): boolean {
+  return provider !== '_all' && provider !== 'claude';
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -177,12 +191,15 @@ function benchmarkLabel(metric: MetricDef): string {
   return `${formatValue(good, metric.format)} / ${formatValue(degraded, metric.format)}`;
 }
 
-function detectRegressions(db: VitalsDB): {
+function detectRegressions(
+  db: VitalsDB,
+  provider: string = '_all',
+): {
   status: string;
   alerts: Array<{ metric: string; severity: string; message: string }>;
 } {
   try {
-    const detector = new RegressionDetector(db);
+    const detector = new RegressionDetector(db, provider);
     const health = detector.getHealthStatus();
     const status =
       health.status === 'green' ? 'healthy' : health.status === 'yellow' ? 'warning' : 'critical';
@@ -220,8 +237,11 @@ function detectRegressions(db: VitalsDB): {
     { key: 'prompts_per_session', good: 35.9, degraded: 27.9, higherIsBetter: true },
   ];
 
+  const nonClaude = isNonClaudeProvider(provider);
+
   for (const b of benchmarks) {
-    const rows = db.getDailyMetrics(b.key, 7);
+    if (nonClaude && CLAUDE_ONLY_METRICS.has(b.key)) continue;
+    const rows = db.getDailyMetrics(b.key, 7, undefined, undefined, provider);
     if (rows.length === 0) continue;
     const avg = average(rows.map((r) => r.value));
 
@@ -260,18 +280,20 @@ export class MarkdownReport {
     this.db = db;
   }
 
-  generate(options: { days?: number } = {}): string {
+  generate(options: { days?: number; provider?: string } = {}): string {
     const _days = options.days ?? 30;
+    const provider = options.provider ?? '_all';
+    const nonClaude = isNonClaudeProvider(provider);
     const lines: string[] = [];
 
-    const dateRange = this.db.getDateRange();
-    const sessionCount = this.db.getSessionCount();
-    const toolCallCount = this.db.getToolCallCount();
+    const dateRange = this.db.getDateRange(provider);
+    const sessionCount = this.db.getSessionCount(provider);
+    const toolCallCount = this.db.getToolCallCount(provider);
 
     // Collect per-metric data
     const metricData: Record<string, { current7: number; previous7: number }> = {};
     for (const metric of ALL_METRICS) {
-      const rows = this.db.getDailyMetrics(metric.key, 14);
+      const rows = this.db.getDailyMetrics(metric.key, 14, undefined, undefined, provider);
       const values = rows.map((r) => r.value);
       const midpoint = Math.max(0, values.length - 7);
       const current7 = values.slice(midpoint);
@@ -282,7 +304,7 @@ export class MarkdownReport {
       };
     }
 
-    const regressions = detectRegressions(this.db);
+    const regressions = detectRegressions(this.db, provider);
 
     // --- Title ---
     lines.push('# Claude Code Quality Report');
@@ -291,6 +313,8 @@ export class MarkdownReport {
       lines.push(`**Date range:** ${dateRange.min} to ${dateRange.max}`);
     }
     lines.push(`**Sessions scanned:** ${sessionCount} | **Tool calls:** ${toolCallCount}`);
+    const sourceLabel = provider === '_all' ? 'all providers' : provider;
+    lines.push(`**Source:** ${sourceLabel}`);
     lines.push('');
 
     // --- Executive Summary ---
@@ -339,15 +363,15 @@ export class MarkdownReport {
       const data = metricData[metric.key];
       if (!data) continue;
 
+      const providerLocal = nonClaude && CLAUDE_ONLY_METRICS.has(metric.key);
+      const label = providerLocal ? `${metric.label} (provider-local)` : metric.label;
       const currentStr = formatValue(data.current7, metric.format);
       const prevStr = formatValue(data.previous7, metric.format);
       const trend = trendEmoji(data.current7, data.previous7, metric.higherIsBetter);
-      const bench = benchmarkLabel(metric);
-      const status = benchmarkStatus(data.current7, metric);
+      const bench = providerLocal ? '-' : benchmarkLabel(metric);
+      const status = providerLocal ? 'n/a' : benchmarkStatus(data.current7, metric);
 
-      lines.push(
-        `| ${metric.label} | ${currentStr} | ${prevStr} | ${trend} | ${bench} | ${status} |`,
-      );
+      lines.push(`| ${label} | ${currentStr} | ${prevStr} | ${trend} | ${bench} | ${status} |`);
     }
     lines.push('');
 
@@ -359,7 +383,7 @@ export class MarkdownReport {
     // --- Thinking Depth Analysis ---
     lines.push('## Thinking Depth Analysis');
     lines.push('');
-    this.appendThinkingSection(lines, metricData);
+    this.appendThinkingSection(lines, metricData, nonClaude);
 
     // --- Quality Signals ---
     lines.push('## Quality Signals');
@@ -374,7 +398,7 @@ export class MarkdownReport {
     // --- Efficiency ---
     lines.push('## Efficiency');
     lines.push('');
-    this.appendEfficiencySection(lines, metricData);
+    this.appendEfficiencySection(lines, metricData, nonClaude);
 
     // --- Change Impact Log ---
     lines.push('## Change Impact Log');
@@ -488,20 +512,28 @@ export class MarkdownReport {
   private appendThinkingSection(
     lines: string[],
     data: Record<string, { current7: number; previous7: number }>,
+    providerLocal: boolean,
   ): void {
     const depth = data.thinking_depth_median;
     const redacted = data.thinking_depth_redacted_pct;
 
     if (depth) {
-      lines.push(
-        `Median thinking depth: **${Math.round(depth.current7)}** characters (benchmark: 2200 good, 600 degraded)`,
-      );
+      const suffix = providerLocal
+        ? 'provider-local; no Claude benchmark applied'
+        : 'benchmark: 2200 good, 600 degraded';
+      lines.push(`Median thinking depth: **${Math.round(depth.current7)}** characters (${suffix})`);
       lines.push('');
-      lines.push(
-        'Thinking depth measures the amount of internal reasoning the model performs ' +
-          'before responding. Deeper thinking generally correlates with higher-quality ' +
-          'outputs and fewer errors.',
-      );
+      if (providerLocal) {
+        lines.push(
+          'Thinking depth is reported as a provider-local signal for this source. Compare it against this provider over time, not against Claude-calibrated thresholds.',
+        );
+      } else {
+        lines.push(
+          'Thinking depth measures the amount of internal reasoning the model performs ' +
+            'before responding. Deeper thinking generally correlates with higher-quality ' +
+            'outputs and fewer errors.',
+        );
+      }
     }
     lines.push('');
 
@@ -619,6 +651,7 @@ export class MarkdownReport {
   private appendEfficiencySection(
     lines: string[],
     data: Record<string, { current7: number; previous7: number }>,
+    providerLocal: boolean,
   ): void {
     const churn = data.edit_churn_rate;
     const bash = data.bash_success_rate;
@@ -639,10 +672,12 @@ export class MarkdownReport {
       lines.push(`| Sub-agent Usage | ${subagent.current7.toFixed(1)}% |`);
     }
     if (cost) {
-      lines.push(`| Daily Cost Estimate | $${cost.current7.toFixed(2)} |`);
+      const label = providerLocal ? 'Daily Cost Estimate (provider-local)' : 'Daily Cost Estimate';
+      lines.push(`| ${label} | $${cost.current7.toFixed(2)} |`);
     }
     if (pressure) {
-      lines.push(`| Context Pressure | ${pressure.current7.toFixed(1)} |`);
+      const label = providerLocal ? 'Context Pressure (provider-local)' : 'Context Pressure';
+      lines.push(`| ${label} | ${pressure.current7.toFixed(1)} |`);
     }
     lines.push('');
 
@@ -651,10 +686,16 @@ export class MarkdownReport {
         'a sign the model is thrashing rather than making targeted corrections.',
     );
     lines.push('');
-    lines.push(
-      '**Context pressure** compares quality in the first quartile of context usage vs the last. ' +
-        'Positive values indicate degradation as the context window fills up.',
-    );
+    if (providerLocal) {
+      lines.push(
+        '**Context pressure** is provider-local for this source and should be interpreted as a within-provider trend until calibrated.',
+      );
+    } else {
+      lines.push(
+        '**Context pressure** compares quality in the first quartile of context usage vs the last. ' +
+          'Positive values indicate degradation as the context window fills up.',
+      );
+    }
     lines.push('');
   }
 
