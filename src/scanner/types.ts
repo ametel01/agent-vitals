@@ -32,6 +32,8 @@ export interface ParsedThinkingBlock {
   isRedacted: boolean;
   contentLength: number;
   signatureLength: number;
+  /** Provider-local depth estimate when the adapter has a better signal. */
+  estimatedDepth?: number;
 }
 
 export interface ParsedToolResult {

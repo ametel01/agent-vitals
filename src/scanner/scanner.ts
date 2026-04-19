@@ -177,9 +177,11 @@ export class Scanner {
 
         // Insert thinking blocks
         for (const tb of am.thinkingBlocks) {
-          const estimatedDepth = tb.isRedacted
-            ? Math.round(tb.signatureLength * SIGNATURE_TO_CONTENT_RATIO)
-            : tb.contentLength;
+          const estimatedDepth =
+            tb.estimatedDepth ??
+            (tb.isRedacted
+              ? Math.round(tb.signatureLength * SIGNATURE_TO_CONTENT_RATIO)
+              : tb.contentLength);
 
           this.db.insertThinkingBlock({
             session_id: sessionId,
