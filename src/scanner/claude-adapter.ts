@@ -336,11 +336,11 @@ function findPatternMatches(text: string, patterns: string[]): TextPatternMatch[
   return matches;
 }
 
-function detectReasoningLoops(text: string): TextPatternMatch[] {
+export function detectReasoningLoops(text: string): TextPatternMatch[] {
   return findPatternMatches(text, REASONING_LOOP_PATTERNS);
 }
 
-function detectLazinessViolations(
+export function detectLazinessViolations(
   text: string,
 ): Array<TextPatternMatch & { category: LazinessCategory }> {
   const violations: Array<TextPatternMatch & { category: LazinessCategory }> = [];
@@ -355,11 +355,11 @@ function detectLazinessViolations(
   return violations;
 }
 
-function detectSelfAdmittedFailures(text: string): TextPatternMatch[] {
+export function detectSelfAdmittedFailures(text: string): TextPatternMatch[] {
   return findPatternMatches(text, SELF_ADMITTED_FAILURE_PATTERNS);
 }
 
-function analyzeUserSentiment(text: string): UserPromptSentiment {
+export function analyzeUserSentiment(text: string): UserPromptSentiment {
   const lowerText = text.toLowerCase();
   // Split on word boundaries for word-level matching
   const words = lowerText.split(/\W+/).filter(Boolean);
@@ -446,7 +446,7 @@ function detectToolResultError(content: string): boolean {
   );
 }
 
-function detectInterrupt(text: string): boolean {
+export function detectInterrupt(text: string): boolean {
   return text.includes('[Request interrupted by user]');
 }
 
