@@ -709,7 +709,7 @@ program
   .command('annotate')
   .description('Log a manual change event')
   .argument('<description>', 'Description of the change')
-  .option('--source <source>', 'Accepted for CLI consistency: claude, codex, or all', 'all')
+  .option('--source <source>', 'Tag the change with a source: claude, codex, or all', 'all')
   .option('--db <path>', 'Custom database path')
   .action((description, opts) => {
     const provider = resolveReportProvider(opts.source);
@@ -824,7 +824,7 @@ program
 program
   .command('changes')
   .description('List all tracked changes')
-  .option('--source <source>', 'Accepted for CLI consistency: claude, codex, or all', 'all')
+  .option('--source <source>', 'Filter by source: claude, codex, or all', 'all')
   .option('--db <path>', 'Custom database path')
   .action((opts) => {
     const provider = resolveReportProvider(opts.source);
