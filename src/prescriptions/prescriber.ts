@@ -35,13 +35,19 @@ export class Prescriber {
 
   diagnose(): Prescription[] {
     const prescriptions: Prescription[] = [];
+    // Prescriptions in this file are Claude-specific (CLAUDE.md / ~/.claude/
+    // settings). Do not emit them for Codex-only databases; Codex
+    // prescriptions need provider-specific fixes in a later phase.
+    const providers = this.db.getProvidersInSessions();
+    if (!providers.includes('claude')) return prescriptions;
+    const scope = 'claude';
 
     for (const fix of KNOWN_FIXES) {
-      const latest = this.db.getLatestMetric(fix.metric);
+      const latest = this.db.getLatestMetric(fix.metric, scope);
       if (!latest) continue;
 
       // Also get 7-day average for stability
-      const rows = this.db.getDailyMetrics(fix.metric, 7);
+      const rows = this.db.getDailyMetrics(fix.metric, 7, undefined, undefined, scope);
       if (rows.length === 0) continue;
       const avg = rows.reduce((s, r) => s + r.value, 0) / rows.length;
 

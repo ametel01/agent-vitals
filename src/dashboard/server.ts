@@ -9,6 +9,14 @@ function getErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+function resolveSourceParam(source: string | null): string {
+  if (!source) return '_all';
+  const s = source.toLowerCase();
+  if (s === 'all') return '_all';
+  if (s === 'claude' || s === 'codex') return s;
+  return '_all';
+}
+
 function resolveHtmlPath(): string {
   // First try next to the compiled JS (dist/dashboard/dashboard.html)
   const nextToCompiled = path.join(__dirname, 'dashboard.html');
@@ -35,9 +43,12 @@ export function serveDashboard(db: VitalsDB, port: number) {
     }
 
     const url = req.url || '/';
+    const parsedUrl = new URL(url, `http://localhost:${port}`);
+    const pathname = parsedUrl.pathname;
+    const provider = resolveSourceParam(parsedUrl.searchParams.get('source'));
 
     try {
-      if (url === '/' || url === '/index.html') {
+      if (pathname === '/' || pathname === '/index.html') {
         const htmlPath = resolveHtmlPath();
         const html = fs.readFileSync(htmlPath, 'utf-8');
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -45,14 +56,14 @@ export function serveDashboard(db: VitalsDB, port: number) {
         return;
       }
 
-      if (url === '/api/metrics') {
-        const metrics = db.getAllDailyMetricsForDashboard(90);
+      if (pathname === '/api/metrics') {
+        const metrics = db.getAllDailyMetricsForDashboard(90, provider);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(metrics));
         return;
       }
 
-      if (url === '/api/changes') {
+      if (pathname === '/api/changes') {
         const changes = db.getAllChanges();
         const changesWithImpact = changes.map((change) => ({
           ...change,
@@ -63,19 +74,20 @@ export function serveDashboard(db: VitalsDB, port: number) {
         return;
       }
 
-      if (url === '/api/health') {
-        const detector = new RegressionDetector(db);
+      if (pathname === '/api/health') {
+        const detector = new RegressionDetector(db, provider);
         const health = detector.getHealthStatus();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(health));
         return;
       }
 
-      if (url === '/api/sessions') {
+      if (pathname === '/api/sessions') {
         const data = {
-          count: db.getSessionCount(),
-          toolCalls: db.getToolCallCount(),
-          dateRange: db.getDateRange(),
+          count: db.getSessionCount(provider),
+          toolCalls: db.getToolCallCount(provider),
+          dateRange: db.getDateRange(provider),
+          providers: db.getProvidersInSessions(),
         };
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(data));

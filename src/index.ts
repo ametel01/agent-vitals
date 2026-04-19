@@ -101,19 +101,22 @@ program
   .option('-f, --format <format>', 'Output format: terminal or md', 'terminal')
   .option('-m, --model <model>', 'Filter by model')
   .option('-p, --project <project>', 'Filter by project')
+  .option('--source <source>', 'Filter by source: claude, codex, or all', 'all')
   .option('--db <path>', 'Custom database path')
   .action((opts) => {
+    const provider = resolveReportProvider(opts.source);
     const db = new VitalsDB(opts.db);
     try {
       if (opts.format === 'md' || opts.format === 'markdown') {
         const report = new MarkdownReport(db);
-        console.log(report.generate({ days: parseInt(opts.days, 10) }));
+        console.log(report.generate({ days: parseInt(opts.days, 10), provider }));
       } else {
         const report = new TerminalReport(db);
         report.generate({
           days: parseInt(opts.days, 10),
           model: opts.model,
           project: opts.project,
+          provider,
         });
       }
     } finally {
@@ -121,15 +124,25 @@ program
     }
   });
 
+function resolveReportProvider(source: string | undefined): string {
+  const s = (source || 'all').toLowerCase();
+  if (s === 'all') return '_all';
+  if (s === 'claude' || s === 'codex') return s;
+  console.error(chalk.red(`Unsupported --source "${source}". Use one of: all, claude, codex.`));
+  process.exit(1);
+}
+
 // --- health ---
 program
   .command('health')
+  .option('--source <source>', 'Filter by source: claude, codex, or all', 'all')
   .description('One-line health status')
   .option('--db <path>', 'Custom database path')
   .action((opts) => {
+    const provider = resolveReportProvider(opts.source);
     const db = new VitalsDB(opts.db);
     try {
-      const detector = new RegressionDetector(db);
+      const detector = new RegressionDetector(db, provider);
       const health = detector.getHealthStatus();
 
       const icon = health.status === 'green' ? '🟢' : health.status === 'yellow' ? '🟡' : '🔴';
@@ -148,7 +161,15 @@ program
           console.log(`  ${colorFn(alert.message)}`);
         }
         console.log('');
-        console.log(chalk.gray('  Run "claude-vitals prescribe" for specific fixes.'));
+        if (provider === '_all' || provider === 'claude') {
+          console.log(chalk.gray('  Run "claude-vitals prescribe" for specific fixes.'));
+        } else {
+          console.log(
+            chalk.gray(
+              '  Codex-specific prescriptions are not implemented yet; inspect the report.',
+            ),
+          );
+        }
       }
     } finally {
       db.close();
@@ -222,9 +243,18 @@ program
       const prescriptions = prescriber.diagnose();
 
       if (prescriptions.length === 0) {
-        console.log(
-          chalk.green('✓ No prescriptions needed — all metrics within acceptable ranges.'),
-        );
+        const providers = db.getProvidersInSessions();
+        if (!providers.includes('claude') && providers.includes('codex')) {
+          console.log(
+            chalk.yellow(
+              'No Codex prescriptions available yet. Codex-specific fixes are planned separately.',
+            ),
+          );
+        } else {
+          console.log(
+            chalk.green('✓ No prescriptions needed — all metrics within acceptable ranges.'),
+          );
+        }
         return;
       }
 
