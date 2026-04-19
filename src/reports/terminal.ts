@@ -262,6 +262,26 @@ function padLeft(str: string, len: number): string {
   return ' '.repeat(pad) + str;
 }
 
+const REPORT_BOX_WIDTH = 66;
+
+function centerText(str: string, width: number): string {
+  const padding = Math.max(0, width - str.length);
+  const left = Math.floor(padding / 2);
+  const right = padding - left;
+  return `${' '.repeat(left)}${str}${' '.repeat(right)}`;
+}
+
+function reportTitleBox(title: string): string[] {
+  const horizontal = '═'.repeat(REPORT_BOX_WIDTH);
+  return [
+    chalk.bold.cyan(`  ╔${horizontal}╗`),
+    chalk.bold.cyan('  ║') +
+      chalk.bold.white(centerText(title, REPORT_BOX_WIDTH)) +
+      chalk.bold.cyan('║'),
+    chalk.bold.cyan(`  ╚${horizontal}╝`),
+  ];
+}
+
 // ---------------------------------------------------------------------------
 // RegressionDetector stub
 // ---------------------------------------------------------------------------
@@ -423,17 +443,7 @@ export class TerminalReport {
 
     // Header
     console.log('');
-    console.log(
-      chalk.bold.cyan('  ╔══════════════════════════════════════════════════════════════════╗'),
-    );
-    console.log(
-      chalk.bold.cyan('  ║') +
-        chalk.bold.white('           CLAUDE VITALS REPORT                                ') +
-        chalk.bold.cyan('║'),
-    );
-    console.log(
-      chalk.bold.cyan('  ╚══════════════════════════════════════════════════════════════════╝'),
-    );
+    for (const line of reportTitleBox('AGENT VITALS REPORT')) console.log(line);
     console.log('');
 
     if (dateRange?.min) {

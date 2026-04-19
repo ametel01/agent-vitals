@@ -57,7 +57,7 @@ Prescriptions are provider-specific and both providers support `--apply`. Claude
 ### Self-Correct
 
 `/vitals` skill in Claude Code
-Claude checks its own quality mid-session and applies behavioral corrections. Install with `bash scripts/install.sh`.
+The skill checks session quality mid-session and applies behavioral corrections. Install with `bash scripts/install.sh`.
 
 ---
 
@@ -85,7 +85,7 @@ Percentage of thinking blocks with no content, only a signature. High redaction 
 
 **Good:** ≥ 6.6 · **Degraded:** ≤ 2.0
 
-The most powerful behavioral signal. Files read divided by files edited. A model that reads 6 files before editing 1 understands context. A model that reads 2 is guessing. **How it's used:** The single number that best captures "is Claude doing good work."
+The most powerful behavioral signal. Files read divided by files edited. A model that reads 6 files before editing 1 understands context. A model that reads 2 is guessing. **How it's used:** The single number that best captures "is the agent doing good work."
 
 #### 4. Research:Mutation Ratio
 

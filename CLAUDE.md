@@ -1,6 +1,6 @@
 # agent-vitals
 
-CLI tool that monitors Claude Code quality by analyzing session logs. Based on [@stellaraccident's analysis](https://github.com/anthropics/claude-code/issues/42796) of 234,760 tool calls.
+CLI tool that monitors AI coding agent quality by analyzing Claude Code and Codex session logs. Based on [@stellaraccident's analysis](https://github.com/anthropics/claude-code/issues/42796) of 234,760 tool calls.
 
 ## Structure
 

@@ -2,7 +2,7 @@
 name: agent-vitals
 version: '1.0.0'
 description: >
-  Self-quality verification for Claude Code. Scans session logs, computes 20
+  Self-quality verification for AI coding agents. Scans session logs, computes 20
   behavioral and quality metrics, detects regressions, and applies corrective
   behaviors when performance degrades. Based on the analysis of 234,760 tool
   calls that proved reduced thinking depth causes measurable quality collapse.
@@ -22,7 +22,7 @@ license: MIT
 
 # agent-vitals
 
-Self-quality verification for Claude Code sessions.
+Self-quality verification for AI coding agent sessions.
 
 You are running a diagnostic check against your own session logs. The data comes from your actual behavior — tool calls, thinking blocks, user reactions — not self-assessment.
 
@@ -35,13 +35,13 @@ You are running a diagnostic check against your own session logs. The data comes
 Ingest any new session data and compute metrics:
 
 ```bash
-node H:/ClaudeValidate/dist/index.js scan
+agent-vitals scan
 ```
 
 ### Step 2: Health Check
 
 ```bash
-node H:/ClaudeValidate/dist/index.js health
+agent-vitals health
 ```
 
 If GREEN — report "Vitals: green" to the user and stop.
@@ -51,7 +51,7 @@ If YELLOW or RED — continue to Step 3.
 ### Step 3: Full Report
 
 ```bash
-node H:/ClaudeValidate/dist/index.js report
+agent-vitals report
 ```
 
 Read the output. Identify every metric in WARNING or DEGRADED range using these benchmarks:
@@ -110,7 +110,7 @@ Be more thorough. Read before editing. Don't skip steps. Don't produce partial w
 If any metric is in WARNING or DEGRADED range, check for config-level fixes:
 
 ```bash
-node H:/ClaudeValidate/dist/index.js prescribe
+agent-vitals prescribe
 ```
 
 This outputs specific environment variables, settings.json values, and CLAUDE.md rules to fix the degraded metrics. Report these to the user.
@@ -118,7 +118,7 @@ This outputs specific environment variables, settings.json values, and CLAUDE.md
 If they agree, apply automatically:
 
 ```bash
-node H:/ClaudeValidate/dist/index.js prescribe --apply
+agent-vitals prescribe --apply
 ```
 
 This writes the fixes to `~/.claude/settings.json` and `~/.claude/CLAUDE.md`. The impact can be measured after 7 days with `agent-vitals impact`.
@@ -141,8 +141,8 @@ Be direct. If you're degraded, say so.
 Silent self-check. Only speak up if something is wrong.
 
 ```bash
-node H:/ClaudeValidate/dist/index.js scan 2>/dev/null
-node H:/ClaudeValidate/dist/index.js health
+agent-vitals scan 2>/dev/null
+agent-vitals health
 ```
 
 - GREEN: Say "Vitals: green" and move on.
@@ -164,8 +164,8 @@ Regardless of status, always apply baseline behaviors:
 Generate a GitHub-postable quality report:
 
 ```bash
-node H:/ClaudeValidate/dist/index.js scan 2>&1
-node H:/ClaudeValidate/dist/index.js report --format md
+agent-vitals scan 2>&1
+agent-vitals report --format md
 ```
 
 Output the full markdown. Do not summarize or abbreviate.
@@ -177,8 +177,8 @@ Output the full markdown. Do not summarize or abbreviate.
 Launch the interactive dashboard:
 
 ```bash
-node H:/ClaudeValidate/dist/index.js scan 2>&1
-node H:/ClaudeValidate/dist/index.js dashboard
+agent-vitals scan 2>&1
+agent-vitals dashboard
 ```
 
 Tell the user the dashboard is at http://localhost:7847.

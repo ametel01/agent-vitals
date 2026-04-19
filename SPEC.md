@@ -1,4 +1,4 @@
-Build an open source CLI tool called "agent-vitals" that continuously monitors Claude Code quality by analyzing session logs (~/.claude/projects/ on Unix, %USERPROFILE%\.claude\projects\ on Windows, check WSL paths too). TypeScript, Node >= 18, SQLite for storage, single-file HTML dashboard with React + Recharts from CDN. Commander.js CLI. MIT license.
+Build an open source CLI tool called "agent-vitals" that continuously monitors AI coding agent quality by analyzing Claude Code and Codex session logs. For Claude Code, read ~/.claude/projects/ on Unix, %USERPROFILE%\.claude\projects\ on Windows, and WSL paths too. TypeScript, Node >= 18, SQLite for storage, single-file HTML dashboard with React + Recharts from CDN. Commander.js CLI. MIT license.
 
 The project is inspired by and replicates the analysis from https://github.com/anthropics/claude-code/issues/42796 — where a power user proved that reduced thinking depth caused measurable quality collapse across 234,760 tool calls. We make that analysis continuous, automatic, and extended with change-impact tracking.
 
@@ -50,7 +50,7 @@ The most powerful behavioral signal. Measures whether the model is researching b
 - The original's benchmarks: 6.6 was "research-first" (good), 2.0 was "edit-first" (degraded)
 
 **Why it matters:**
-A model that reads 6 files before editing 1 understands context. A model that reads 2 files before editing 1 is guessing. The original showed this dropped 70% and it directly caused blind edits, broken code, and convention violations. This is the single number that best captures "is Claude doing good work."
+A model that reads 6 files before editing 1 understands context. A model that reads 2 files before editing 1 is guessing. The original showed this dropped 70% and it directly caused blind edits, broken code, and convention violations. This is the single number that best captures "is the agent doing good work."
 
 ---
 

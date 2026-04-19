@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>agent-vitals &mdash; Continuous Quality Monitoring for Claude Code</title>
-<meta name="description" content="Monitor Claude Code quality by analyzing session logs. 20 metrics, regression detection, and automated prescriptions based on analysis of 234,760 tool calls.">
+<title>agent-vitals &mdash; Continuous Quality Monitoring for AI Coding Agents</title>
+<meta name="description" content="Monitor AI coding agent quality by analyzing session logs. 20 metrics, regression detection, and automated prescriptions based on analysis of 234,760 tool calls.">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#0f0f0f;--card:#1a1a2e;--text:#e0e0e0;--text-dim:#888;--accent:#00d4ff;--green:#00ff88;--red:#ff4444;--yellow:#ffd700;--border:#2a2a3e;--sidebar-w:220px;--font-mono:'SF Mono','Fira Code','Cascadia Code',Consolas,monospace}
@@ -84,7 +84,7 @@ tr:hover td{background:rgba(0,212,255,.03)}
 .rx-type{font-size:.72rem;padding:.15rem .4rem;border-radius:3px;font-weight:600}
 .rx-env{background:rgba(0,212,255,.12);color:var(--accent)}
 .rx-settings{background:rgba(0,255,136,.12);color:var(--green)}
-.rx-claude{background:rgba(255,215,0,.12);color:var(--yellow)}
+.rx-instructions{background:rgba(255,215,0,.12);color:var(--yellow)}
 
 /* Callout */
 .callout{background:var(--card);border-left:3px solid var(--accent);padding:1rem 1.2rem;border-radius:0 8px 8px 0;margin:1rem 0;font-size:.85rem}
@@ -116,7 +116,7 @@ footer a{color:var(--accent)}
 
 <!-- Sidebar -->
 <aside class="sidebar" id="sidebar">
-  <div class="logo">claude<span>-vitals</span></div>
+  <div class="logo">agent<span>-vitals</span></div>
   <nav>
     <a href="#hero">Home</a>
     <a href="#why">Why This Exists</a>
@@ -238,7 +238,7 @@ agent-vitals scan</pre>
   <div class="card-grid">
     <div class="card">
       <h3>scan</h3>
-      <p>Ingest Claude Code session logs into the database. Detects config changes and computes all metrics.</p>
+      <p>Ingest Claude Code and Codex session logs into the database. Detects config changes and computes all metrics.</p>
       <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>agent-vitals scan
 agent-vitals scan --force
 agent-vitals scan --verbose</pre>
@@ -305,7 +305,7 @@ agent-vitals annotate "Set /effort max"</pre>
 <!-- PRESCRIPTIONS -->
 <section id="prescriptions">
   <h2>Prescriptions</h2>
-  <div class="callout good">agent-vitals doesn't just detect problems &mdash; it prescribes specific fixes. Three types: <span class="rx-type rx-env">ENV</span> environment variables, <span class="rx-type rx-settings">settings.json</span> values, and <span class="rx-type rx-claude">CLAUDE.md</span> rules.</div>
+  <div class="callout good">agent-vitals doesn't just detect problems &mdash; it prescribes specific fixes. Three types: <span class="rx-type rx-env">ENV</span> environment variables, <span class="rx-type rx-settings">settings.json</span> values, and <span class="rx-type rx-instructions">instruction</span> files.</div>
 
   <div class="table-wrap">
     <table>
@@ -314,13 +314,13 @@ agent-vitals annotate "Set /effort max"</pre>
         <tr><td>Thinking Depth</td><td><span class="rx-type rx-env">ENV</span></td><td><code>CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING=1</code></td></tr>
         <tr><td>Thinking Depth</td><td><span class="rx-type rx-env">ENV</span></td><td><code>MAX_THINKING_TOKENS=31999</code></td></tr>
         <tr><td>Thinking Depth</td><td><span class="rx-type rx-settings">settings.json</span></td><td><code>effortLevel: "high"</code></td></tr>
-        <tr><td>Read:Edit Ratio</td><td><span class="rx-type rx-claude">CLAUDE.md</span></td><td>Before ANY edit, read the target file AND at least 2 related files</td></tr>
-        <tr><td>Blind Edit Rate</td><td><span class="rx-type rx-claude">CLAUDE.md</span></td><td>Zero tolerance: verify target file was Read in last 10 tool calls before every edit</td></tr>
-        <tr><td>Write vs Edit</td><td><span class="rx-type rx-claude">CLAUDE.md</span></td><td>Never use Write to modify existing files &mdash; use Edit for surgical changes only</td></tr>
-        <tr><td>Laziness Signals</td><td><span class="rx-type rx-claude">CLAUDE.md</span></td><td>Ban: "should I continue?", "want me to keep going?", "good stopping point", "out of scope"</td></tr>
-        <tr><td>Reasoning Loops</td><td><span class="rx-type rx-claude">CLAUDE.md</span></td><td>Resolve contradictions internally before producing output</td></tr>
-        <tr><td>Self-Admitted Failures</td><td><span class="rx-type rx-claude">CLAUDE.md</span></td><td>Read more before editing. Test after changing. Verify before moving on.</td></tr>
-        <tr><td>Research:Mutation</td><td><span class="rx-type rx-claude">CLAUDE.md</span></td><td>Before any code change: Grep for the symbol, Glob for related files, Read each file</td></tr>
+        <tr><td>Read:Edit Ratio</td><td><span class="rx-type rx-instructions">instructions</span></td><td>Before ANY edit, read the target file AND at least 2 related files</td></tr>
+        <tr><td>Blind Edit Rate</td><td><span class="rx-type rx-instructions">instructions</span></td><td>Zero tolerance: verify target file was Read in last 10 tool calls before every edit</td></tr>
+        <tr><td>Write vs Edit</td><td><span class="rx-type rx-instructions">instructions</span></td><td>Never use Write to modify existing files &mdash; use Edit for surgical changes only</td></tr>
+        <tr><td>Laziness Signals</td><td><span class="rx-type rx-instructions">instructions</span></td><td>Ban: "should I continue?", "want me to keep going?", "good stopping point", "out of scope"</td></tr>
+        <tr><td>Reasoning Loops</td><td><span class="rx-type rx-instructions">instructions</span></td><td>Resolve contradictions internally before producing output</td></tr>
+        <tr><td>Self-Admitted Failures</td><td><span class="rx-type rx-instructions">instructions</span></td><td>Read more before editing. Test after changing. Verify before moving on.</td></tr>
+        <tr><td>Research:Mutation</td><td><span class="rx-type rx-instructions">instructions</span></td><td>Before any code change: Grep for the symbol, Glob for related files, Read each file</td></tr>
       </tbody>
     </table>
   </div>
@@ -331,7 +331,7 @@ agent-vitals annotate "Set /effort max"</pre>
 
   <h3>Auto-Apply Fixes</h3>
   <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span>agent-vitals prescribe --apply</pre>
-  <p style="font-size:.85rem;color:var(--text-dim);margin:.4rem 0">Writes environment variables, updates settings.json, and appends rules to CLAUDE.md.</p>
+  <p style="font-size:.85rem;color:var(--text-dim);margin:.4rem 0">Writes provider-specific config and appends instruction rules.</p>
 </section>
 
 <!-- SKILLS -->
@@ -410,8 +410,8 @@ export MAX_THINKING_TOKENS=31999</pre>
 }</pre>
   <p style="font-size:.82rem;color:var(--text-dim);margin:.3rem 0 1rem">Forces high-effort responses and makes thinking visible for debugging.</p>
 
-  <h3>CLAUDE.md Best Practices</h3>
-  <p style="font-size:.85rem;color:var(--text-dim);margin-bottom:.5rem">A well-crafted CLAUDE.md prevents most quality issues before they start:</p>
+  <h3>Agent Instruction Best Practices</h3>
+  <p style="font-size:.85rem;color:var(--text-dim);margin-bottom:.5rem">Well-crafted instruction files like CLAUDE.md or AGENTS.md prevent most quality issues before they start:</p>
   <pre><span class="copy-btn" onclick="copyBlock(this)">copy</span># Rules
 
 ## Read Before Edit
