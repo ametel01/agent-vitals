@@ -7,6 +7,7 @@ import { SCHEMA_SQL } from './schema';
 type SqlParam = string | number | null;
 type DailyMetricRow = { date: string; value: number; detail: string | null };
 type DateValueRow = { date: string; value: number };
+type DateModelValueRow = { date: string; model: string; value: number };
 type LatestMetricRow = { date: string; value: number };
 type ChangeRow = {
   id: number;
@@ -14,6 +15,9 @@ type ChangeRow = {
   type: string;
   description: string;
   provider: string;
+};
+type PrescribeApplyRow = ChangeRow & {
+  content_snapshot: string | null;
 };
 type ImpactResultRow = {
   metric_name: string;
@@ -516,6 +520,36 @@ export class VitalsDB {
     return Number(r.lastInsertRowid);
   }
 
+  insertPrescribeApply(c: {
+    timestamp: string;
+    provider: 'claude' | 'codex';
+    target: string;
+    prescriptionCount: number;
+    metrics: string[];
+    written: string[];
+    status: 'applied' | 'no_prescriptions';
+  }): number {
+    const providerLabel = c.provider === 'codex' ? 'Codex' : 'Claude';
+    const description =
+      c.status === 'no_prescriptions'
+        ? `${providerLabel} prescribe --apply run; no prescriptions needed`
+        : `${providerLabel} prescribe --apply run; ${c.prescriptionCount} prescription(s) applied`;
+
+    return this.insertChange({
+      timestamp: c.timestamp,
+      type: 'prescribe_apply',
+      description,
+      provider: c.provider,
+      content_snapshot: JSON.stringify({
+        target: c.target,
+        prescriptionCount: c.prescriptionCount,
+        metrics: c.metrics,
+        written: c.written,
+        status: c.status,
+      }),
+    });
+  }
+
   // --- Impact Results ---
   insertImpactResult(ir: {
     change_id: number;
@@ -589,6 +623,65 @@ export class VitalsDB {
       .all(metricName, startDate, endDate, provider) as DateValueRow[];
   }
 
+  getMetricForDateRangeByModel(
+    metricName: string,
+    startDate: string,
+    endDate: string,
+    provider: string = '_all',
+  ): DateModelValueRow[] {
+    return this.db
+      .prepare(
+        `
+      SELECT date, model, metric_value as value FROM daily_metrics
+      WHERE metric_name = ? AND date >= ? AND date <= ?
+        AND provider = ? AND model IS NOT NULL AND model != '_all' AND project_path = '_all'
+      ORDER BY model ASC, date ASC
+    `,
+      )
+      .all(metricName, startDate, endDate, provider) as DateModelValueRow[];
+  }
+
+  getContributingModelsForMetric(
+    metricName: string,
+    startDate: string,
+    endDate: string,
+    provider: string = '_all',
+  ): string[] {
+    if (metricName === 'laziness_total') {
+      const params: SqlParam[] = [startDate, endDate];
+      let sql = `
+        SELECT DISTINCT s.model
+        FROM laziness_violations lv
+        JOIN sessions s ON lv.session_id = s.id
+        WHERE lv.timestamp IS NOT NULL
+          AND substr(lv.timestamp, 1, 10) >= ?
+          AND substr(lv.timestamp, 1, 10) <= ?
+          AND s.model IS NOT NULL
+          AND s.model != ''
+      `;
+      if (provider !== '_all') {
+        sql += ' AND s.provider = ?';
+        params.push(provider);
+      }
+      sql += ' ORDER BY s.model ASC';
+      return (this.db.prepare(sql).all(...params) as Array<{ model: string }>).map((r) => r.model);
+    }
+
+    return (
+      this.db
+        .prepare(
+          `
+      SELECT DISTINCT model
+      FROM daily_metrics
+      WHERE metric_name = ? AND date >= ? AND date <= ?
+        AND provider = ? AND model IS NOT NULL AND model != '_all' AND project_path = '_all'
+      ORDER BY model ASC
+    `,
+        )
+        .all(metricName, startDate, endDate, provider) as Array<{ model: string }>
+    ).map((r) => r.model);
+  }
+
   getLatestMetric(metricName: string, provider: string = '_all'): LatestMetricRow | undefined {
     return this.db
       .prepare(
@@ -623,6 +716,21 @@ export class VitalsDB {
 
     sql += ' ORDER BY timestamp DESC';
     return this.db.prepare(sql).all(...params) as ChangeRow[];
+  }
+
+  getLatestPrescribeApplies(): Record<'claude' | 'codex', PrescribeApplyRow | null> {
+    const stmt = this.db.prepare(`
+      SELECT id, timestamp, type, description, provider, content_snapshot
+      FROM changes
+      WHERE type = 'prescribe_apply' AND provider = ?
+      ORDER BY timestamp DESC, id DESC
+      LIMIT 1
+    `);
+
+    return {
+      claude: stmt.get('claude') as PrescribeApplyRow | null,
+      codex: stmt.get('codex') as PrescribeApplyRow | null,
+    };
   }
 
   getImpactResults(changeId: number, provider: string = '_all'): ImpactResultRow[] {
