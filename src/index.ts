@@ -206,14 +206,12 @@ program
           console.log(`  ${colorFn(alert.message)}`);
         }
         console.log('');
-        if (provider === '_all' || provider === 'claude') {
-          console.log(chalk.gray('  Run "agent-vitals prescribe" for specific fixes.'));
-        } else {
+        if (provider === 'codex') {
           console.log(
-            chalk.gray(
-              '  Codex-specific prescriptions are not implemented yet; inspect the report.',
-            ),
+            chalk.gray('  Run "agent-vitals prescribe --source codex" for Codex-specific fixes.'),
           );
+        } else {
+          console.log(chalk.gray('  Run "agent-vitals prescribe" for specific fixes.'));
         }
       }
     } finally {
@@ -298,9 +296,13 @@ program
 // --- prescribe ---
 program
   .command('prescribe')
-  .description('Analyze metrics and prescribe specific fixes (env vars, settings, CLAUDE.md rules)')
+  .description('Analyze metrics and prescribe source-specific fixes')
   .option('--apply', 'Actually write the fixes (default: dry-run showing recommendations)')
-  .option('--target <scope>', 'Where to apply: global (~/.claude/) or project (.claude/)', 'global')
+  .option(
+    '--target <scope>',
+    'Where to apply: global source config or project-local instructions',
+    'global',
+  )
   .option('-f, --format <format>', 'Output format: terminal, json, or md', 'terminal')
   .option('--source <source>', 'Filter by source: claude, codex, or all', 'all')
   .option('--db <path>', 'Custom database path')
@@ -310,12 +312,14 @@ program
     try {
       const prescriber = new Prescriber(db);
       const prescriptions = prescriber.diagnose(provider);
-      const hasCodexPrescriptions = prescriptions.some(
-        (p) =>
-          p.fix.type === 'codex_config_toml' ||
-          p.fix.type === 'codex_rules' ||
-          p.fix.type === 'project_instructions',
-      );
+      const isCodexPrescription = (p: (typeof prescriptions)[number]) =>
+        p.fix.type === 'codex_config_toml' ||
+        p.fix.type === 'codex_rules' ||
+        p.fix.type === 'project_instructions';
+      const codexPrescriptions = prescriptions.filter(isCodexPrescription);
+      const claudePrescriptions = prescriptions.filter((p) => !isCodexPrescription(p));
+      const hasCodexPrescriptions = codexPrescriptions.length > 0;
+      const hasClaudePrescriptions = claudePrescriptions.length > 0;
 
       if (prescriptions.length === 0) {
         const providers = db.getProvidersInSessions();
@@ -323,26 +327,25 @@ program
           provider === 'codex' ||
           (!providers.includes('claude') && providers.includes('codex'))
         ) {
-          console.log(
-            chalk.yellow(
-              'No Codex prescriptions available yet. Codex-specific fixes are planned separately.',
-            ),
-          );
+          if (providers.includes('codex')) {
+            console.log(
+              chalk.green(
+                '✓ No Codex prescriptions needed — all Codex metrics within acceptable ranges.',
+              ),
+            );
+          } else {
+            console.log(
+              chalk.yellow(
+                'No Codex sessions found. Run "agent-vitals scan --source codex" first.',
+              ),
+            );
+          }
         } else {
           console.log(
             chalk.green('✓ No prescriptions needed — all metrics within acceptable ranges.'),
           );
         }
         return;
-      }
-
-      if (hasCodexPrescriptions && opts.apply) {
-        console.error(
-          chalk.red(
-            'Codex prescription --apply is not implemented yet. Run without --apply to review dry-run targets.',
-          ),
-        );
-        process.exit(1);
       }
 
       if (opts.format === 'json') {
@@ -478,38 +481,65 @@ program
 
       // Apply or show instructions
       if (opts.apply) {
-        const result = prescriber.apply(prescriptions, { target: opts.target });
         console.log(chalk.green.bold('  APPLIED\n'));
-        if (result.settingsWritten) {
-          console.log(chalk.green(`  ✓ Settings written to ${result.settingsPath}`));
-          if (result.envVarsCount > 0)
-            console.log(chalk.gray(`    ${result.envVarsCount} environment variable(s)`));
-          if (result.settingsCount > 0)
-            console.log(chalk.gray(`    ${result.settingsCount} setting(s)`));
+        if (hasClaudePrescriptions) {
+          const result = prescriber.apply(claudePrescriptions, { target: opts.target });
+          if (result.settingsWritten) {
+            console.log(chalk.green(`  ✓ Settings written to ${result.settingsPath}`));
+            if (result.envVarsCount > 0)
+              console.log(chalk.gray(`    ${result.envVarsCount} environment variable(s)`));
+            if (result.settingsCount > 0)
+              console.log(chalk.gray(`    ${result.settingsCount} setting(s)`));
+          }
+          if (result.claudeMdWritten) {
+            console.log(chalk.green(`  ✓ Rules written to ${result.claudeMdPath}`));
+            console.log(chalk.gray(`    ${result.claudeMdRulesCount} behavioral rule(s)`));
+          }
         }
-        if (result.claudeMdWritten) {
-          console.log(chalk.green(`  ✓ Rules written to ${result.claudeMdPath}`));
-          console.log(chalk.gray(`    ${result.claudeMdRulesCount} behavioral rule(s)`));
+        if (hasCodexPrescriptions) {
+          const result = prescriber.applyCodex(codexPrescriptions, { target: opts.target });
+          if (result.rulesWritten.length > 0) {
+            console.log(
+              chalk.green(`  ✓ Codex rules written (${result.rulesWritten.length} file(s)):`),
+            );
+            for (const p of result.rulesWritten) console.log(chalk.gray(`    ${p}`));
+          }
+          if (result.configTomlWritten) {
+            console.log(chalk.green(`  ✓ Codex config written to ${result.configTomlPath}`));
+            console.log(
+              chalk.gray(
+                '    Only root-level key = value lines are managed; table-scoped keys are left untouched.',
+              ),
+            );
+          }
+          if (result.agentsMdWritten) {
+            console.log(chalk.green(`  ✓ Project instructions written to ${result.agentsMdPath}`));
+            console.log(chalk.gray(`    ${result.agentsMdRulesCount} rule(s)`));
+          }
         }
         console.log('');
         console.log(chalk.gray('  Run "agent-vitals impact" after 7 days to measure the effect.'));
       } else {
-        if (hasCodexPrescriptions) {
-          console.log(chalk.gray('  DRY RUN ONLY:'));
-          console.log(
-            chalk.white(
-              '    Review the suggested ~/.codex/config.toml, ~/.codex/rules/*.rules, and AGENTS.md changes.',
-            ),
-          );
-          console.log(chalk.gray('    Codex --apply is intentionally not implemented yet.'));
-        } else {
-          console.log(chalk.gray('  TO APPLY:'));
+        console.log(chalk.gray('  TO APPLY:'));
+        if (hasClaudePrescriptions) {
           console.log(
             chalk.white(`    agent-vitals prescribe --apply                # writes to ~/.claude/`),
           );
           console.log(
             chalk.white(
               `    agent-vitals prescribe --apply --target project  # writes to .claude/`,
+            ),
+          );
+        }
+        if (hasCodexPrescriptions) {
+          console.log(
+            chalk.white(
+              `    agent-vitals prescribe --source codex --apply           # writes to ~/.codex/ and ./AGENTS.md`,
+            ),
+          );
+          console.log(
+            chalk.white(
+              `    agent-vitals prescribe --source codex --apply --target project  # writes ./AGENTS.md only`,
             ),
           );
         }
