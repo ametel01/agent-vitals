@@ -177,6 +177,10 @@ function prescriptionSummary(p: {
   return `${p.fix.key} = ${p.fix.value}`;
 }
 
+function uniquePrescriptionMetrics(prescriptions: Array<{ metric: string }>): string[] {
+  return Array.from(new Set(prescriptions.map((p) => p.metric))).sort();
+}
+
 // --- health ---
 program
   .command('health')
@@ -376,6 +380,29 @@ program
 
       if (prescriptions.length === 0) {
         const providers = db.getProvidersInSessions();
+        if (opts.apply) {
+          const appliedProvider =
+            provider === 'codex'
+              ? 'codex'
+              : provider === 'claude'
+                ? 'claude'
+                : providers.includes('claude')
+                  ? 'claude'
+                  : providers.includes('codex')
+                    ? 'codex'
+                    : null;
+          if (appliedProvider) {
+            db.insertPrescribeApply({
+              timestamp: new Date().toISOString(),
+              provider: appliedProvider,
+              target: opts.target,
+              prescriptionCount: 0,
+              metrics: [],
+              written: [],
+              status: 'no_prescriptions',
+            });
+          }
+        }
         if (
           provider === 'codex' ||
           (!providers.includes('claude') && providers.includes('codex'))
@@ -537,7 +564,9 @@ program
         console.log(chalk.green.bold('  APPLIED\n'));
         if (hasClaudePrescriptions) {
           const result = prescriber.apply(claudePrescriptions, { target: opts.target });
+          const written: string[] = [];
           if (result.settingsWritten) {
+            written.push(result.settingsPath);
             console.log(chalk.green(`  ✓ Settings written to ${result.settingsPath}`));
             if (result.envVarsCount > 0)
               console.log(chalk.gray(`    ${result.envVarsCount} environment variable(s)`));
@@ -545,12 +574,23 @@ program
               console.log(chalk.gray(`    ${result.settingsCount} setting(s)`));
           }
           if (result.claudeMdWritten) {
+            written.push(result.claudeMdPath);
             console.log(chalk.green(`  ✓ Rules written to ${result.claudeMdPath}`));
             console.log(chalk.gray(`    ${result.claudeMdRulesCount} behavioral rule(s)`));
           }
+          db.insertPrescribeApply({
+            timestamp: new Date().toISOString(),
+            provider: 'claude',
+            target: opts.target,
+            prescriptionCount: claudePrescriptions.length,
+            metrics: uniquePrescriptionMetrics(claudePrescriptions),
+            written,
+            status: 'applied',
+          });
         }
         if (hasCodexPrescriptions) {
           const result = prescriber.applyCodex(codexPrescriptions, { target: opts.target });
+          const written = [...result.rulesWritten];
           if (result.rulesWritten.length > 0) {
             console.log(
               chalk.green(`  ✓ Codex rules written (${result.rulesWritten.length} file(s)):`),
@@ -558,6 +598,7 @@ program
             for (const p of result.rulesWritten) console.log(chalk.gray(`    ${p}`));
           }
           if (result.configTomlWritten) {
+            written.push(result.configTomlPath);
             console.log(chalk.green(`  ✓ Codex config written to ${result.configTomlPath}`));
             console.log(
               chalk.gray(
@@ -566,9 +607,19 @@ program
             );
           }
           if (result.agentsMdWritten) {
+            written.push(result.agentsMdPath);
             console.log(chalk.green(`  ✓ Project instructions written to ${result.agentsMdPath}`));
             console.log(chalk.gray(`    ${result.agentsMdRulesCount} rule(s)`));
           }
+          db.insertPrescribeApply({
+            timestamp: new Date().toISOString(),
+            provider: 'codex',
+            target: opts.target,
+            prescriptionCount: codexPrescriptions.length,
+            metrics: uniquePrescriptionMetrics(codexPrescriptions),
+            written,
+            status: 'applied',
+          });
         }
         console.log('');
         console.log(chalk.gray('  Run "agent-vitals impact" after 7 days to measure the effect.'));
