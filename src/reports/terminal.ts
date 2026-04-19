@@ -541,7 +541,7 @@ export class TerminalReport {
     }
 
     // Recent Changes
-    const changes = this.db.getAllChanges().slice(0, 5);
+    const changes = this.db.getAllChanges(provider).slice(0, 5);
     if (changes.length > 0) {
       console.log('');
       console.log(chalk.bold.white('  RECENT CHANGES'));
@@ -560,7 +560,7 @@ export class TerminalReport {
         );
 
         // Show impact if available
-        const impacts = this.db.getImpactResults(change.id);
+        const impacts = this.db.getImpactResults(change.id, provider);
         if (impacts.length > 0) {
           const improved = impacts.filter((i) => i.verdict === 'improved').length;
           const degraded = impacts.filter((i) => i.verdict === 'degraded').length;

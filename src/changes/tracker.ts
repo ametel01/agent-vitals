@@ -131,11 +131,12 @@ export class ChangeTracker {
   // addAnnotation — insert a manual change entry
   // ---------------------------------------------------------------------------
 
-  addAnnotation(description: string): number {
+  addAnnotation(description: string, provider: string = '_all'): number {
     return this.db.insertChange({
       timestamp: new Date().toISOString(),
       type: 'manual',
       description,
+      provider,
     });
   }
 
@@ -146,10 +147,24 @@ export class ChangeTracker {
   computeImpact(changeId: number, provider: string = '_all'): ImpactSummary | null {
     // Retrieve the change record
     const change = this.db.db
-      .prepare('SELECT id, timestamp, description FROM changes WHERE id = ?')
-      .get(changeId) as { id: number; timestamp: string; description: string } | undefined;
+      .prepare('SELECT id, timestamp, description, provider FROM changes WHERE id = ?')
+      .get(changeId) as
+      | { id: number; timestamp: string; description: string; provider: string }
+      | undefined;
 
     if (!change) return null;
+
+    // If the caller asked for a concrete provider but this change was recorded
+    // against the other concrete provider, refuse to compute impact — the
+    // windows would mix unrelated sources. Changes stored as '_all' (global)
+    // are valid for any concrete provider.
+    if (
+      (provider === 'claude' || provider === 'codex') &&
+      change.provider !== '_all' &&
+      change.provider !== provider
+    ) {
+      return null;
+    }
 
     const changeDate = new Date(change.timestamp);
 
@@ -207,6 +222,7 @@ export class ChangeTracker {
         after_value: afterAvg,
         change_pct: Math.round(changePct * 100) / 100,
         verdict,
+        provider,
       });
 
       results.push({

@@ -403,7 +403,7 @@ export class MarkdownReport {
     // --- Change Impact Log ---
     lines.push('## Change Impact Log');
     lines.push('');
-    this.appendChangesSection(lines);
+    this.appendChangesSection(lines, provider);
 
     // --- Regression Alerts ---
     lines.push('## Regression Alerts');
@@ -699,8 +699,8 @@ export class MarkdownReport {
     lines.push('');
   }
 
-  private appendChangesSection(lines: string[]): void {
-    const changes = this.db.getAllChanges();
+  private appendChangesSection(lines: string[], provider: string): void {
+    const changes = this.db.getAllChanges(provider);
 
     if (changes.length === 0) {
       lines.push('No changes recorded yet.');
@@ -715,7 +715,7 @@ export class MarkdownReport {
       lines.push(`**Type:** ${change.type}`);
       lines.push('');
 
-      const impacts = this.db.getImpactResults(change.id);
+      const impacts = this.db.getImpactResults(change.id, provider);
       if (impacts.length > 0) {
         lines.push('| Metric | Before | After | Change | Verdict |');
         lines.push('|--------|-------:|------:|-------:|:-------:|');

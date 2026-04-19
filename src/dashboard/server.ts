@@ -64,10 +64,10 @@ export function serveDashboard(db: VitalsDB, port: number, defaultProvider: stri
       }
 
       if (pathname === '/api/changes') {
-        const changes = db.getAllChanges();
+        const changes = db.getAllChanges(provider);
         const changesWithImpact = changes.map((change) => ({
           ...change,
-          impacts: db.getImpactResults(change.id),
+          impacts: db.getImpactResults(change.id, provider),
         }));
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(changesWithImpact));

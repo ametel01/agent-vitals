@@ -628,11 +628,11 @@ program
   .option('--source <source>', 'Accepted for CLI consistency: claude, codex, or all', 'all')
   .option('--db <path>', 'Custom database path')
   .action((description, opts) => {
-    resolveReportProvider(opts.source);
+    const provider = resolveReportProvider(opts.source);
     const db = new VitalsDB(opts.db);
     try {
       const tracker = new ChangeTracker(db);
-      tracker.addAnnotation(description);
+      tracker.addAnnotation(description, provider);
       console.log(chalk.green(`✓ Annotation logged: "${description}"`));
     } finally {
       db.close();
@@ -648,13 +648,36 @@ program
   .option('--db <path>', 'Custom database path')
   .action((changeId, opts) => {
     const provider = resolveReportProvider(opts.source);
+    const parsedChangeId = parseInt(changeId, 10);
+    if (Number.isNaN(parsedChangeId)) {
+      console.error(chalk.red(`Invalid change ID "${changeId}". Use a numeric change ID.`));
+      process.exit(1);
+    }
+
     const db = new VitalsDB(opts.db);
     try {
       const tracker = new ChangeTracker(db);
-      const impact = tracker.computeImpact(parseInt(changeId, 10), provider);
+      const impact = tracker.computeImpact(parsedChangeId, provider);
 
       if (!impact) {
-        console.log(chalk.red('Change not found'));
+        const change = db.db
+          .prepare('SELECT provider FROM changes WHERE id = ?')
+          .get(parsedChangeId) as { provider: string } | undefined;
+        if (
+          change &&
+          (provider === 'claude' || provider === 'codex') &&
+          change.provider !== '_all' &&
+          change.provider !== provider
+        ) {
+          console.log(
+            chalk.red(
+              `Change #${parsedChangeId} belongs to source "${change.provider}", not "${provider}".`,
+            ),
+          );
+          console.log(chalk.gray(`Re-run with --source ${change.provider} or --source all.`));
+        } else {
+          console.log(chalk.red('Change not found'));
+        }
         process.exit(1);
       }
 
@@ -720,10 +743,10 @@ program
   .option('--source <source>', 'Accepted for CLI consistency: claude, codex, or all', 'all')
   .option('--db <path>', 'Custom database path')
   .action((opts) => {
-    resolveReportProvider(opts.source);
+    const provider = resolveReportProvider(opts.source);
     const db = new VitalsDB(opts.db);
     try {
-      const changes = db.getAllChanges();
+      const changes = db.getAllChanges(provider);
       if (changes.length === 0) {
         console.log(
           chalk.gray('No changes tracked yet. Run "agent-vitals scan" or "agent-vitals annotate"'),
